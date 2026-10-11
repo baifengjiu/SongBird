@@ -214,6 +214,80 @@ jobs:
             --skip-core --disable-single-instance --non-interactive --quit-after-ms 3000 \
             2>&1 | tee smoke.log
 
+      # The smoke run above passes --skip-core, so nothing in CI had ever downloaded, extracted or
+      # started a core on macOS. The extraction tools were only ever covered as constructed command
+      # lines -- CoreUpdateServiceTests asserts the argv, which says nothing about whether ditto, tar
+      # and gzip actually work on the archive the vendor publishes. This step runs one of each archive
+      # kind and then executes the result, which is the part a wrong tool cannot fake: a core
+      # extracted with the wrong tool is missing or not executable, and a core built for another
+      # platform cannot start at all. That last one is what v2.5.0-beta1 shipped, because the platform
+      # detection returned Other on every platform and each backend fell through to its Windows
+      # branch, so macOS installed sing-box.exe.
+      - name: Download, extract and run a core of each kind
+        run: |
+          set -euo pipefail
+
+          case "$(uname -m)" in
+            arm64)  singbox_arch=arm64; xray_arch=arm64-v8a; mihomo_arch=arm64 ;;
+            x86_64) singbox_arch=amd64; xray_arch=64;        mihomo_arch=amd64 ;;
+            *) echo "::error::unsupported architecture $(uname -m)"; exit 1 ;;
+          esac
+          echo "$(uname -m): sing-box darwin-${singbox_arch}, Xray macos-${xray_arch}, mihomo darwin-${mihomo_arch}"
+
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+
+          # Resolved through the release API rather than pinned, so this keeps tracking what the
+          # vendors actually publish instead of what they published the day this was written. The
+          # patterns mirror what the backends score, exclusions included: sing-box's
+          # legacy-macos-10.13 asset is the pre-11 Intel build, and mihomo's
+          # -v1-/-v2-/-v3-/-go1xx-/compatible- names are not the plain build.
+          fetch_asset() {
+            local repo="$1" pattern="$2" out="$3" url
+            url="$(curl -fsSL --retry 3 \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${repo}/releases/latest" \
+              | jq -r --arg p "$pattern" '.assets[] | select(.name | test($p)) | .browser_download_url' \
+              | head -n 1)"
+            if [ -z "$url" ]; then
+              echo "::error::no asset matching ${pattern} in ${repo}"
+              exit 1
+            fi
+            echo "  ${url##*/}"
+            curl -fsSL --retry 3 -o "$out" "$url"
+          }
+
+          echo "sing-box (.tar.gz, extracted with tar):"
+          fetch_asset SagerNet/sing-box "^sing-box-[0-9.]+-darwin-${singbox_arch}\.tar\.gz$" "$work/sing-box.tar.gz"
+          mkdir -p "$work/singbox"
+          tar -xzf "$work/sing-box.tar.gz" -C "$work/singbox"
+          singbox_bin="$(find "$work/singbox" -type f -name sing-box | head -n 1)"
+          [ -n "$singbox_bin" ] || { echo "::error::the sing-box archive held no sing-box binary"; exit 1; }
+          # tar restores the mode bits the archive carries. If it did not, the core would not start,
+          # and this is the assertion that says so rather than a confusing exec failure.
+          [ -x "$singbox_bin" ] || { echo "::error::tar did not restore the executable bit on $singbox_bin"; exit 1; }
+          "$singbox_bin" version
+
+          echo "Xray (.zip, extracted with ditto):"
+          fetch_asset XTLS/Xray-core "^Xray-macos-${xray_arch}\.zip$" "$work/xray.zip"
+          mkdir -p "$work/xray"
+          # ditto rather than unzip for the same reason the application uses it: it is the one that
+          # restores the permission bits inside the tree.
+          ditto -x -k "$work/xray.zip" "$work/xray"
+          [ -x "$work/xray/xray" ] || { echo "::error::ditto did not produce an executable Xray binary"; exit 1; }
+          "$work/xray/xray" -version
+
+          echo "mihomo (bare .gz, decompressed with gzip):"
+          fetch_asset MetaCubeX/mihomo "^mihomo-darwin-${mihomo_arch}-v[0-9.]+\.gz$" "$work/mihomo.gz"
+          mkdir -p "$work/mihomo"
+          # The payload is the binary itself, so it is redirected into a file and marked executable --
+          # decompressGzip() plus markExecutable() in the application, and the step that has no
+          # counterpart in the archive cases because gzip cannot carry a mode.
+          gzip -dc "$work/mihomo.gz" > "$work/mihomo/mihomo"
+          chmod +x "$work/mihomo/mihomo"
+          "$work/mihomo/mihomo" -v
+
       - name: Upload the smoke logs
         if: always()
         uses: actions/upload-artifact@v7
