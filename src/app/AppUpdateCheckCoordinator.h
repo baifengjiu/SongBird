@@ -10,6 +10,7 @@
 #include "appcore/BackgroundTaskCoordinator.h"
 #include "appcore/IUserFeedback.h"
 #include "common/OperationResult.h"
+#include "runtime/core/CoreAssetPlatform.h"
 #include "services/AppUpdateService.h"
 
 class QThread;
@@ -22,6 +23,7 @@ public:
     using CheckForUpdate = std::function<OperationResult(
         const QString& currentVersion,
         bool allowPrerelease,
+        const CoreAssetPlatform& platform,
         AppUpdateCheckResult* result)>;
     using DownloadUpdate = std::function<OperationResult(
         const QUrl& downloadUrl,
@@ -43,6 +45,7 @@ public:
         DownloadUpdate downloadUpdate;
         ThreadRunner runInBackground;
         UiInvoker invokeOnUiThread;
+        std::function<CoreAssetPlatform()> assetPlatform;
     };
 
     explicit AppUpdateCheckCoordinator(Dependencies dependencies, QObject* parent = nullptr);

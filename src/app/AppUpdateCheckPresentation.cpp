@@ -45,7 +45,7 @@ QString appendMissingDownloadPrompt(const QString& prompt)
     message.append(QStringLiteral("\n\n"));
     message.append(QCoreApplication::translate(
         "AppBootstrap",
-        "No downloadable Windows executable was found. Open the release page instead?"));
+        "No downloadable update package was found. Open the release page instead?"));
     return message;
 }
 

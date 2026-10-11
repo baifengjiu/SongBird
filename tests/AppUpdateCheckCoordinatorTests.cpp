@@ -55,6 +55,7 @@ private slots:
     void checkDoesNotClaimBackgroundTask();
     void manualCheckDownloadsWhenUserAccepts();
     void downloadClaimsAndFinishesAppUpdateTask();
+    void prereleaseBuildChecksPrereleasesEvenWhenTheSettingIsOff();
 };
 
 void AppUpdateCheckCoordinatorTests::checkDoesNotClaimBackgroundTask()
@@ -71,7 +72,7 @@ void AppUpdateCheckCoordinatorTests::checkDoesNotClaimBackgroundTask()
         []() { return QStringLiteral("C:/SongBird"); },
         []() { return false; },
         {},
-        [&checked](const QString&, bool, AppUpdateCheckResult* result) {
+        [&checked](const QString&, bool, const CoreAssetPlatform&, AppUpdateCheckResult* result) {
             checked = true;
             result->updateAvailable = false;
             result->currentVersion = QStringLiteral("1.0.0");
@@ -106,7 +107,7 @@ void AppUpdateCheckCoordinatorTests::manualCheckDownloadsWhenUserAccepts()
         []() { return QStringLiteral("C:/SongBird"); },
         []() { return false; },
         {},
-        [](const QString&, bool, AppUpdateCheckResult* result) {
+        [](const QString&, bool, const CoreAssetPlatform&, AppUpdateCheckResult* result) {
             result->updateAvailable = true;
             result->currentVersion = QStringLiteral("1.0.0");
             result->latestVersion = QStringLiteral("v1.1.0");
@@ -170,6 +171,72 @@ void AppUpdateCheckCoordinatorTests::downloadClaimsAndFinishesAppUpdateTask()
     QVERIFY(!backgroundTasks.isActive());
     QCOMPARE(feedback.informationMessages.size(), 1);
     QVERIFY(feedback.restartPrompts.isEmpty());
+}
+
+// The default configuration skips prereleases, and the newest stable release is numerically older
+// than an installed beta -- so a beta build has to opt itself in, or 2.5.0-beta1 could never learn
+// about 2.5.0-beta2. A stable build must stay unaffected.
+void AppUpdateCheckCoordinatorTests::prereleaseBuildChecksPrereleasesEvenWhenTheSettingIsOff()
+{
+    BackgroundTaskCoordinator backgroundTasks;
+    RecordingFeedback feedback;
+    QList<bool> observedAllowPrerelease;
+    QList<QString> observedVersions;
+
+    AppUpdateCheckCoordinator coordinator({
+        &backgroundTasks,
+        &feedback,
+        []() { return QStringLiteral("2.5.0-beta1"); },
+        []() { return false; },
+        []() { return QStringLiteral("C:/SongBird"); },
+        []() { return false; },
+        {},
+        [&observedAllowPrerelease, &observedVersions](
+            const QString& currentVersion, bool allowPrerelease, const CoreAssetPlatform&, AppUpdateCheckResult* result) {
+            observedVersions.append(currentVersion);
+            observedAllowPrerelease.append(allowPrerelease);
+            result->currentVersion = currentVersion;
+            result->latestVersion = QStringLiteral("v2.5.0-beta2");
+            result->updateAvailable = allowPrerelease;
+            return OperationResult::ok(QStringLiteral("checked"));
+        },
+        {},
+        [](std::function<void()> task) { task(); },
+        [](QObject*, std::function<void()> callback) { callback(); }
+    });
+
+    coordinator.checkAppUpdates(false);
+
+    QCOMPARE(observedVersions, QList<QString>{QStringLiteral("2.5.0-beta1")});
+    QCOMPARE(observedAllowPrerelease, QList<bool>{true});
+
+    // The same coordinator with a stable build keeps honouring the setting.
+    AppUpdateCheckCoordinator stableCoordinator({
+        &backgroundTasks,
+        &feedback,
+        []() { return QStringLiteral("2.4.5"); },
+        []() { return false; },
+        []() { return QStringLiteral("C:/SongBird"); },
+        []() { return false; },
+        {},
+        [&observedAllowPrerelease, &observedVersions](
+            const QString& currentVersion, bool allowPrerelease, const CoreAssetPlatform&, AppUpdateCheckResult* result) {
+            observedVersions.append(currentVersion);
+            observedAllowPrerelease.append(allowPrerelease);
+            result->currentVersion = currentVersion;
+            result->updateAvailable = false;
+            return OperationResult::ok(QStringLiteral("checked"));
+        },
+        {},
+        [](std::function<void()> task) { task(); },
+        [](QObject*, std::function<void()> callback) { callback(); }
+    });
+
+    stableCoordinator.checkAppUpdates(false);
+
+    QCOMPARE(observedVersions,
+             QList<QString>({QStringLiteral("2.5.0-beta1"), QStringLiteral("2.4.5")}));
+    QCOMPARE(observedAllowPrerelease, QList<bool>({true, false}));
 }
 
 QTEST_MAIN(AppUpdateCheckCoordinatorTests)

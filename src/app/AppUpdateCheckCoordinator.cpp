@@ -11,6 +11,8 @@
 #include "app/AppUpdateCheckPresentation.h"
 #include "common/AppPaths.h"
 #include "common/BackgroundThreadLaunch.h"
+#include "runtime/core/CoreAssetPlatform.h"
+#include "services/CoreUpdateVersion.h"
 
 namespace {
 
@@ -64,12 +66,19 @@ void AppUpdateCheckCoordinator::checkAppUpdates(bool manual)
     const QString currentVersion = deps_.currentVersion
         ? deps_.currentVersion()
         : QCoreApplication::applicationVersion();
-    const bool allowPrerelease = deps_.allowPrerelease && deps_.allowPrerelease();
+    // A build that is itself a prerelease has to be able to see prereleases, otherwise
+    // 2.5.0-beta1 could never be told about 2.5.0-beta2: the default configuration skips them,
+    // and the newest stable release is numerically older than the installed beta.
+    const bool allowPrerelease =
+        (deps_.allowPrerelease && deps_.allowPrerelease())
+        || CoreUpdateVersion::isPrerelease(currentVersion);
+    const CoreAssetPlatform platform =
+        deps_.assetPlatform ? deps_.assetPlatform() : currentAssetPlatform();
     QPointer<QObject> uiContext(deps_.feedback->uiContext());
     QPointer<QWidget> dialogParent(deps_.feedback->dialogParent());
     QPointer<AppUpdateCheckCoordinator> self(this);
 
-    runInBackground([self, title, currentVersion, allowPrerelease, manual, uiContext, dialogParent, checkToken]() {
+    runInBackground([self, title, currentVersion, allowPrerelease, platform, manual, uiContext, dialogParent, checkToken]() {
         OperationResult result;
         AppUpdateCheckResult updateResult;
         if (self.isNull()) {
@@ -77,10 +86,10 @@ void AppUpdateCheckCoordinator::checkAppUpdates(bool manual)
         }
 
         if (self->deps_.checkForUpdate) {
-            result = self->deps_.checkForUpdate(currentVersion, allowPrerelease, &updateResult);
+            result = self->deps_.checkForUpdate(currentVersion, allowPrerelease, platform, &updateResult);
         } else {
             AppUpdateService service;
-            result = service.checkForUpdate(currentVersion, allowPrerelease, &updateResult);
+            result = service.checkForUpdate(currentVersion, allowPrerelease, platform, &updateResult);
         }
 
         QObject* target = uiContext.isNull()

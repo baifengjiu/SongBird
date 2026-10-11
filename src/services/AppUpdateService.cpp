@@ -124,6 +124,7 @@ AppUpdateService::AppUpdateService(DownloadHandler downloadHandler)
 OperationResult AppUpdateService::checkForUpdate(
     const QString& currentVersion,
     bool allowPrerelease,
+    const CoreAssetPlatform& platform,
     AppUpdateCheckResult* result) const
 {
     if (result == nullptr) {
@@ -176,7 +177,7 @@ OperationResult AppUpdateService::checkForUpdate(
     result->releaseUrl = release.htmlUrl.isValid()
         ? release.htmlUrl
         : QUrl(songbirdReleasePageUrl());
-    if (const AppUpdateReleaseAsset* asset = selectBestAppUpdateAsset(release.assets)) {
+    if (const AppUpdateReleaseAsset* asset = selectBestAppUpdateAsset(release.assets, platform)) {
         result->assetName = asset->name;
         result->assetDownloadUrl = asset->downloadUrl;
     }

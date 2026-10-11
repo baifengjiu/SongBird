@@ -2,6 +2,27 @@
 
 #include "services/AppUpdateService.h"
 
+namespace {
+
+CoreAssetPlatform windowsPlatform()
+{
+    CoreAssetPlatform platform;
+    platform.os = CoreAssetPlatform::Os::Windows;
+    platform.sixtyFourBit = true;
+    return platform;
+}
+
+CoreAssetPlatform macosPlatform()
+{
+    CoreAssetPlatform platform;
+    platform.os = CoreAssetPlatform::Os::MacOS;
+    platform.appleSilicon = true;
+    platform.sixtyFourBit = true;
+    return platform;
+}
+
+} // namespace
+
 class AppUpdateServiceTests : public QObject {
     Q_OBJECT
 
@@ -10,6 +31,9 @@ private slots:
     void checkSkipsPrereleaseWhenDisabled();
     void checkAllowsPrereleaseWhenEnabled();
     void checkReportsUpToDate();
+    void checkFindsStableReleaseNewerThanTheInstalledPrerelease();
+    void checkFindsNextPrereleaseForTheInstalledPrerelease();
+    void assetSelectionFollowsTheTargetPlatform();
 };
 
 void AppUpdateServiceTests::checkFindsNewerStableRelease()
@@ -22,7 +46,8 @@ void AppUpdateServiceTests::checkFindsNewerStableRelease()
     });
 
     AppUpdateCheckResult result;
-    const OperationResult op = service.checkForUpdate(QStringLiteral("1.1.0"), false, &result);
+    const OperationResult op =
+        service.checkForUpdate(QStringLiteral("1.1.0"), false, windowsPlatform(), &result);
 
     QVERIFY(op.success);
     QVERIFY(result.updateAvailable);
@@ -45,7 +70,8 @@ void AppUpdateServiceTests::checkSkipsPrereleaseWhenDisabled()
     });
 
     AppUpdateCheckResult result;
-    const OperationResult op = service.checkForUpdate(QStringLiteral("1.8.0"), false, &result);
+    const OperationResult op =
+        service.checkForUpdate(QStringLiteral("1.8.0"), false, windowsPlatform(), &result);
 
     QVERIFY(op.success);
     QVERIFY(result.updateAvailable);
@@ -64,7 +90,8 @@ void AppUpdateServiceTests::checkAllowsPrereleaseWhenEnabled()
     });
 
     AppUpdateCheckResult result;
-    const OperationResult op = service.checkForUpdate(QStringLiteral("1.8.0"), true, &result);
+    const OperationResult op =
+        service.checkForUpdate(QStringLiteral("1.8.0"), true, windowsPlatform(), &result);
 
     QVERIFY(op.success);
     QVERIFY(result.updateAvailable);
@@ -79,12 +106,103 @@ void AppUpdateServiceTests::checkReportsUpToDate()
     });
 
     AppUpdateCheckResult result;
-    const OperationResult op = service.checkForUpdate(QStringLiteral("1.2.0"), false, &result);
+    const OperationResult op =
+        service.checkForUpdate(QStringLiteral("1.2.0"), false, windowsPlatform(), &result);
 
     QVERIFY(op.success);
     QVERIFY(!result.updateAvailable);
     QCOMPARE(result.latestVersion, QStringLiteral("v1.2.0"));
     QVERIFY(op.message.contains(QStringLiteral("up to date")));
+}
+
+// A beta has to be able to see the release it exists to test. Comparing the tags while ignoring
+// the prerelease suffix made `2.5.0` look equal to `2.5.0-beta1`, so every beta user would have
+// been told "up to date" on the day 2.5.0 shipped.
+void AppUpdateServiceTests::checkFindsStableReleaseNewerThanTheInstalledPrerelease()
+{
+    AppUpdateService service([](const QUrl&, QByteArray* content) {
+        *content =
+            R"([)"
+            R"({"tag_name":"v2.5.0","draft":false,"prerelease":false},)"
+            R"({"tag_name":"v2.5.0-beta2","draft":false,"prerelease":true},)"
+            R"({"tag_name":"v2.4.5","draft":false,"prerelease":false})"
+            R"(])";
+        return OperationResult::ok();
+    });
+
+    AppUpdateCheckResult result;
+    const OperationResult op =
+        service.checkForUpdate(QStringLiteral("2.5.0-beta1"), false, windowsPlatform(), &result);
+
+    QVERIFY(op.success);
+    QVERIFY(result.updateAvailable);
+    QCOMPARE(result.latestVersion, QStringLiteral("v2.5.0"));
+}
+
+// Same triple, different prerelease: `2.5.0-beta2` is newer than `2.5.0-beta1`.
+void AppUpdateServiceTests::checkFindsNextPrereleaseForTheInstalledPrerelease()
+{
+    AppUpdateService service([](const QUrl&, QByteArray* content) {
+        *content =
+            R"([)"
+            R"({"tag_name":"v2.5.0-beta2","draft":false,"prerelease":true,"assets":[)"
+            R"({"name":"songbird.exe","browser_download_url":"https://example.invalid/songbird.exe"}]},)"
+            R"({"tag_name":"v2.5.0-beta1","draft":false,"prerelease":true},)"
+            R"({"tag_name":"v2.4.5","draft":false,"prerelease":false})"
+            R"(])";
+        return OperationResult::ok();
+    });
+
+    AppUpdateCheckResult result;
+    const OperationResult op =
+        service.checkForUpdate(QStringLiteral("2.5.0-beta1"), true, windowsPlatform(), &result);
+
+    QVERIFY(op.success);
+    QVERIFY(result.updateAvailable);
+    QCOMPARE(result.latestVersion, QStringLiteral("v2.5.0-beta2"));
+    QCOMPARE(result.assetName, QStringLiteral("songbird.exe"));
+}
+
+// Scoring only `.exe` handed a macOS user the Windows build of the very same release, because
+// nothing about `songbird.exe` says "Windows" to the old name heuristics.
+void AppUpdateServiceTests::assetSelectionFollowsTheTargetPlatform()
+{
+    const QByteArray payload =
+        R"([{"tag_name":"v2.5.0","draft":false,"prerelease":false,"assets":[)"
+        R"({"name":"SongBird-macos-universal.dmg","browser_download_url":"https://example.invalid/SongBird-macos-universal.dmg"},)"
+        R"({"name":"songbird.exe","browser_download_url":"https://example.invalid/songbird.exe"}]}])";
+    AppUpdateService service([&payload](const QUrl&, QByteArray* content) {
+        *content = payload;
+        return OperationResult::ok();
+    });
+
+    AppUpdateCheckResult macResult;
+    QVERIFY(service.checkForUpdate(QStringLiteral("2.4.5"), false, macosPlatform(), &macResult).success);
+    QVERIFY(macResult.updateAvailable);
+    QCOMPARE(macResult.assetName, QStringLiteral("SongBird-macos-universal.dmg"));
+    QCOMPARE(macResult.assetDownloadUrl.toString(),
+             QStringLiteral("https://example.invalid/SongBird-macos-universal.dmg"));
+
+    AppUpdateCheckResult windowsResult;
+    QVERIFY(service.checkForUpdate(QStringLiteral("2.4.5"), false, windowsPlatform(), &windowsResult).success);
+    QVERIFY(windowsResult.updateAvailable);
+    QCOMPARE(windowsResult.assetName, QStringLiteral("songbird.exe"));
+
+    // A Windows-only release leaves a macOS user with no asset; the coordinator then offers the
+    // release page instead of downloading an executable this platform cannot run.
+    const QByteArray windowsOnlyPayload =
+        R"([{"tag_name":"v2.5.0","draft":false,"prerelease":false,"assets":[)"
+        R"({"name":"songbird.exe","browser_download_url":"https://example.invalid/songbird.exe"}]}])";
+    AppUpdateService windowsOnlyService([&windowsOnlyPayload](const QUrl&, QByteArray* content) {
+        *content = windowsOnlyPayload;
+        return OperationResult::ok();
+    });
+
+    AppUpdateCheckResult noAssetResult;
+    QVERIFY(windowsOnlyService.checkForUpdate(QStringLiteral("2.4.5"), false, macosPlatform(), &noAssetResult).success);
+    QVERIFY(noAssetResult.updateAvailable);
+    QVERIFY(noAssetResult.assetName.isEmpty());
+    QVERIFY(!noAssetResult.assetDownloadUrl.isValid());
 }
 
 QTEST_MAIN(AppUpdateServiceTests)

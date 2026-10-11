@@ -7,6 +7,7 @@
 #include <QUrl>
 
 #include "common/OperationResult.h"
+#include "runtime/core/CoreAssetPlatform.h"
 
 struct AppUpdateCheckResult {
     bool updateAvailable = false;
@@ -27,6 +28,7 @@ public:
     OperationResult checkForUpdate(
         const QString& currentVersion,
         bool allowPrerelease,
+        const CoreAssetPlatform& platform,
         AppUpdateCheckResult* result) const;
     OperationResult downloadUpdate(
         const QUrl& downloadUrl,

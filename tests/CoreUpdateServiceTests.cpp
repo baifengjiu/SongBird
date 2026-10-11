@@ -136,6 +136,7 @@ private slots:
     void backendMetadataMatchesCatalog();
     void currentAssetPlatformMatchesTheBuildHost();
     void versionComparisonNormalizesTagsAndComparesNumericParts();
+    void versionComparisonOrdersPrereleasesAgainstTheirRelease();
     void updateReturnsPromptlyWhenCancellationRequestedDuringDownload();
     void updateFallsBackToBuiltInSingBoxVersionWhenReleaseApiUnavailableAndNoCoreInstalled();
     void updateUsesBuiltInXrayBootstrapVersionWhenNoCoreInstalled();
@@ -193,6 +194,34 @@ void CoreUpdateServiceTests::versionComparisonNormalizesTagsAndComparesNumericPa
     QVERIFY(CoreUpdateVersion::isNewerThan(QStringLiteral("V2.0.0"), QStringLiteral("version 1.99.99")));
     QVERIFY(!CoreUpdateVersion::isNewerThan(QStringLiteral("v1.2.0"), QStringLiteral("v1.2")));
     QVERIFY(!CoreUpdateVersion::isNewerThan(QStringLiteral("v1.2.3-beta"), QStringLiteral("v1.2.3")));
+}
+
+// The tag suffix used to be discarded before comparing, which made every prerelease of a version
+// compare equal to that version and to its sibling prereleases. That is what let an installed
+// 2.5.0-beta1 sit on "up to date" while 2.5.0-beta2 and then 2.5.0 were published.
+void CoreUpdateServiceTests::versionComparisonOrdersPrereleasesAgainstTheirRelease()
+{
+    QVERIFY(CoreUpdateVersion::isPrerelease(QStringLiteral("2.5.0-beta1")));
+    QVERIFY(CoreUpdateVersion::isPrerelease(QStringLiteral("v2.5.0-beta.1")));
+    QVERIFY(!CoreUpdateVersion::isPrerelease(QStringLiteral("v2.5.0")));
+    QVERIFY(!CoreUpdateVersion::isPrerelease(QStringLiteral("2.5.0+build7")));
+
+    // The release is newer than the prerelease it leads up to.
+    QVERIFY(CoreUpdateVersion::isNewerThan(QStringLiteral("v2.5.0"), QStringLiteral("2.5.0-beta1")));
+    QVERIFY(CoreUpdateVersion::isNewerThan(QStringLiteral("v2.5.0"), QStringLiteral("v2.5.0-beta2")));
+    QVERIFY(!CoreUpdateVersion::isNewerThan(QStringLiteral("2.5.0-beta1"), QStringLiteral("v2.5.0")));
+
+    // Sibling prereleases of the same triple are ordered by their identifiers.
+    QVERIFY(CoreUpdateVersion::isNewerThan(QStringLiteral("v2.5.0-beta2"), QStringLiteral("2.5.0-beta1")));
+    QVERIFY(!CoreUpdateVersion::isNewerThan(QStringLiteral("2.5.0-beta1"), QStringLiteral("v2.5.0-beta2")));
+    QVERIFY(CoreUpdateVersion::isNewerThan(QStringLiteral("v2.5.0-beta10"), QStringLiteral("v2.5.0-beta2")));
+    QVERIFY(CoreUpdateVersion::isNewerThan(QStringLiteral("v2.5.0-rc.1"), QStringLiteral("v2.5.0-beta.9")));
+    QVERIFY(CoreUpdateVersion::isNewerThan(QStringLiteral("v2.5.0-beta.1"), QStringLiteral("v2.5.0-beta")));
+
+    // A higher triple still wins regardless of the suffix, and build metadata is ignored.
+    QVERIFY(CoreUpdateVersion::isNewerThan(QStringLiteral("v2.6.0-beta1"), QStringLiteral("v2.5.0")));
+    QVERIFY(!CoreUpdateVersion::isNewerThan(QStringLiteral("v2.5.0+build7"), QStringLiteral("v2.5.0")));
+    QVERIFY(!CoreUpdateVersion::isNewerThan(QStringLiteral("v2.5.0"), QStringLiteral("v2.5.0+build7")));
 }
 
 void CoreUpdateServiceTests::updateReturnsPromptlyWhenCancellationRequestedDuringDownload()

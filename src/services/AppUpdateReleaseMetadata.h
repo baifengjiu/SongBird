@@ -5,6 +5,8 @@
 #include <QString>
 #include <QUrl>
 
+#include "runtime/core/CoreAssetPlatform.h"
+
 struct AppUpdateReleaseAsset {
     QString name;
     QUrl downloadUrl;
@@ -19,7 +21,9 @@ struct AppUpdateRelease {
     QList<AppUpdateReleaseAsset> assets;
 };
 
-const AppUpdateReleaseAsset* selectBestAppUpdateAsset(const QList<AppUpdateReleaseAsset>& assets);
+const AppUpdateReleaseAsset* selectBestAppUpdateAsset(
+    const QList<AppUpdateReleaseAsset>& assets,
+    const CoreAssetPlatform& platform);
 bool parseLatestAppRelease(
     const QByteArray& payload,
     bool allowPrerelease,

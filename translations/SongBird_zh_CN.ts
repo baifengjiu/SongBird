@@ -614,8 +614,8 @@ Download the update in the background?</source>
         <translation>包：%1</translation>
     </message>
     <message>
-        <source>No downloadable Windows executable was found. Open the release page instead?</source>
-        <translation>未找到可下载的 Windows 可执行文件。改为打开发布页面吗？</translation>
+        <source>No downloadable update package was found. Open the release page instead?</source>
+        <translation>未找到可下载的更新包。改为打开发布页面吗？</translation>
     </message>
     <message>
         <source>%1

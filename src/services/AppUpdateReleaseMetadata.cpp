@@ -4,33 +4,46 @@
 
 #include "common/GitHubReleaseParsing.h"
 
-const AppUpdateReleaseAsset* selectBestAppUpdateAsset(const QList<AppUpdateReleaseAsset>& assets)
+namespace {
+
+// The installer format is per-platform, so the scorer has to be too: scoring `.exe` on macOS
+// would hand a macOS user the Windows build of the same release.
+int scoreAppUpdateAssetName(const QString& assetName, const CoreAssetPlatform& platform)
+{
+    const QString normalized = assetName.trimmed().toLower();
+
+    if (platform.isMacOS()) {
+        return normalized.endsWith(QStringLiteral(".dmg")) ? 400 : -1;
+    }
+
+    // Windows, and any platform we could not identify. The `.exe` branch is the historical
+    // default, and the detection it depends on is guarded by the `q-os-include-scope` check.
+    if (!normalized.endsWith(QStringLiteral(".exe"))) {
+        return -1;
+    }
+
+    int score = normalized.contains(QStringLiteral("setup"))
+            || normalized.contains(QStringLiteral("install"))
+        ? 500
+        : 300;
+    if (!normalized.contains(QStringLiteral("windows"))
+        && !normalized.contains(QStringLiteral("win"))
+        && !normalized.contains(QStringLiteral("songbird"))) {
+        score -= 100;
+    }
+    return score;
+}
+
+} // namespace
+
+const AppUpdateReleaseAsset* selectBestAppUpdateAsset(
+    const QList<AppUpdateReleaseAsset>& assets,
+    const CoreAssetPlatform& platform)
 {
     const AppUpdateReleaseAsset* bestAsset = nullptr;
     int bestScore = -1;
     for (const AppUpdateReleaseAsset& asset : assets) {
-        const QString normalized = asset.name.trimmed().toLower();
-        int score = -1;
-        if (normalized.endsWith(QStringLiteral(".exe"))) {
-            score = normalized.contains(QStringLiteral("setup"))
-                || normalized.contains(QStringLiteral("install"))
-                ? 500
-                : 300;
-        }
-
-        if (!normalized.contains(QStringLiteral("windows"))
-            && !normalized.contains(QStringLiteral("win"))
-            && !normalized.contains(QStringLiteral("songbird"))) {
-            score -= 100;
-        }
-        if (normalized.contains(QStringLiteral("source"))
-            || normalized.contains(QStringLiteral("linux"))
-            || normalized.contains(QStringLiteral("macos"))
-            || normalized.contains(QStringLiteral("darwin"))
-            || normalized.contains(QStringLiteral("android"))) {
-            score = -1;
-        }
-
+        const int score = scoreAppUpdateAssetName(asset.name, platform);
         if (score > bestScore && asset.downloadUrl.isValid()) {
             bestScore = score;
             bestAsset = &asset;
