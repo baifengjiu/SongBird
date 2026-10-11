@@ -9,7 +9,7 @@ SongBird manages V2Ray-style proxy servers — VMess, VLESS, Shadowsocks, Trojan
 | Platform | File | Where |
 |---|---|---|
 | Windows 10/11 (64-bit) | `songbird.exe` — portable, no installer | [latest release](https://github.com/o3ku/SongBird/releases/latest) |
-| macOS (Apple silicon and Intel) | `SongBird-macos-universal.dmg` | [v2.5.0-beta1](https://github.com/o3ku/SongBird/releases/tag/v2.5.0-beta1) — pre-release |
+| macOS (Apple silicon and Intel) | `SongBird-macos-universal.dmg` | [v2.5.0-beta2](https://github.com/o3ku/SongBird/releases/tag/v2.5.0-beta2) — pre-release |
 
 - `songbird.exe` is self-contained. There is nothing to install first: no runtime, no installer, no registry entry.
 - The macOS package is a **universal** DMG, so one file runs on both Apple silicon and Intel Macs. It is published as a pre-release while macOS support is still being shaken out.
