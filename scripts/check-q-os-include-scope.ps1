@@ -12,8 +12,20 @@ $ErrorActionPreference = "Stop"
 function Stop-CheckWithError {
     param([string]$Message)
 
+    Write-Marker "failing: $Message"
     Write-Error $Message -ErrorAction Continue
     exit 1
+}
+
+# A failure that produces no output at all is undiagnosable, and this check failed exactly
+# that way on the Intel macOS runner: ctest reported the test as failed while nothing from
+# the script reached the log. The markers below are flushed by hand, so a process that dies
+# before PowerShell drains its own buffers still leaves a trail showing how far it got.
+function Write-Marker {
+    param([string]$Message)
+
+    Write-Host "q-os-include-scope: $Message"
+    [Console]::Out.Flush()
 }
 
 function Resolve-ScannedRoot {
@@ -38,6 +50,7 @@ $sourceRootPath = Resolve-ScannedRoot -Path $SourceRoot -Label "Source"
 $testRootPath = Resolve-ScannedRoot -Path $TestRoot -Label "Test"
 $roots = @($sourceRootPath, $testRootPath)
 $repoRoot = Split-Path -Parent $sourceRootPath
+Write-Marker "roots: $($roots -join ', ')"
 
 # Every project header, keyed by bare file name. An include is only treated as a project file when it
 # really names one, which is what keeps "<QString>" classified as the Qt header it is.
@@ -56,6 +69,7 @@ foreach ($root in $roots) {
 if ($headerIndex.Count -eq 0) {
     Stop-CheckWithError "No headers found under '$SourceRoot' or '$TestRoot'; the include resolution would be vacuous. Refusing to report a pass."
 }
+Write-Marker "indexed $($headerIndex.Count) header name(s)"
 
 # A Qt header is recognised by its name, not by being missing from the project: "<QtCore/qstring.h>"
 # and "<QString>" are the same header spelled two ways, and both must count.
@@ -162,6 +176,7 @@ foreach ($root in $roots) {
 if ($users.Count -eq 0) {
     Stop-CheckWithError "No file under '$SourceRoot' or '$TestRoot' mentions Q_OS_* or Q_PROCESSOR_*; the scan is stale or the roots are wrong. Refusing to report a pass."
 }
+Write-Marker "walking the include closure of $($users.Count) file(s)"
 
 $violations = New-Object System.Collections.Generic.List[string]
 $reported = New-Object System.Collections.Generic.List[string]
@@ -177,6 +192,7 @@ foreach ($user in $users) {
         $reported.Add("$relative (closure $($result.Closure), first Qt header via $($result.Hits[0]))")
     }
 }
+Write-Marker "closures walked; $($violations.Count) violation(s)"
 
 if ($violations.Count -gt 0) {
     Stop-CheckWithError (($violations | ForEach-Object { "- $_" }) -join [Environment]::NewLine)

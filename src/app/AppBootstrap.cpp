@@ -300,8 +300,17 @@ void AppBootstrap::offerCoreDownloadOnStartup()
     // through one of the mirrors) has no way to get a core: the log only lists the
     // file names it expected. Offer the install once, and remember that the offer
     // was spent so a declined prompt does not come back on every launch.
+    //
+    // The prompt is a modal one, and both automation flags exist precisely so nobody
+    // has to answer one: --non-interactive says "disable blocking prompts", and
+    // --skip-core says "skip startup core detection", which is what this step's
+    // decision is made of. The macOS smoke run passes both plus --quit-after-ms, so
+    // offering here would park the app on the dialog and it would never quit.
     const int existingCoreCount = static_cast<int>(detectExistingCoreTypes().size());
-    if (decideStartupCorePrompt(existingCoreCount, config_.ui().coreSetupPromptShown)
+    if (decideStartupCorePrompt(existingCoreCount,
+                                config_.ui().coreSetupPromptShown,
+                                skipCoreChecks_,
+                                interactivePromptsEnabled())
         != StartupCorePromptDecision::OfferCoreDownload) {
         return;
     }

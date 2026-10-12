@@ -19,6 +19,8 @@ private slots:
     void decideStartupCorePromptOffersDownloadWhenNothingWasFound();
     void decideStartupCorePromptSkipsWhenAnyCoreExists();
     void decideStartupCorePromptSkipsWhenTheOfferWasAlreadySpent();
+    void decideStartupCorePromptSkipsWhenCoreChecksAreSkipped();
+    void decideStartupCorePromptSkipsWhenPromptsAreDisabled();
 };
 
 void StartupSequencerTests::runsStepsInDeclarationOrder()
@@ -154,6 +156,30 @@ void StartupSequencerTests::decideStartupCorePromptSkipsWhenTheOfferWasAlreadySp
     QCOMPARE(
         decideStartupCorePrompt(0, true),
         StartupCorePromptDecision::SkipNoPrompt);
+}
+
+void StartupSequencerTests::decideStartupCorePromptSkipsWhenCoreChecksAreSkipped()
+{
+    // --skip-core asks the app not to look at cores at startup, and the prompt is
+    // made of that lookup; the macOS smoke run would otherwise hang on the dialog.
+    QCOMPARE(
+        decideStartupCorePrompt(0, false, /*skipCoreChecks=*/true),
+        StartupCorePromptDecision::SkipNoPrompt);
+    QCOMPARE(
+        decideStartupCorePrompt(0, false, /*skipCoreChecks=*/true, /*interactivePrompts=*/false),
+        StartupCorePromptDecision::SkipNoPrompt);
+}
+
+void StartupSequencerTests::decideStartupCorePromptSkipsWhenPromptsAreDisabled()
+{
+    // --non-interactive is the flag whose whole purpose is "no blocking prompts".
+    QCOMPARE(
+        decideStartupCorePrompt(0, false, /*skipCoreChecks=*/false, /*interactivePrompts=*/false),
+        StartupCorePromptDecision::SkipNoPrompt);
+    // With prompts allowed and nothing skipped, it is still offered.
+    QCOMPARE(
+        decideStartupCorePrompt(0, false, /*skipCoreChecks=*/false, /*interactivePrompts=*/true),
+        StartupCorePromptDecision::OfferCoreDownload);
 }
 
 QTEST_MAIN(StartupSequencerTests)

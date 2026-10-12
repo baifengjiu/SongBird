@@ -16,10 +16,23 @@ enum class StartupCorePromptDecision {
 // `existingCoreCount` is how many core executables were located in the candidate
 // directories, `promptAlreadyShown` is the persisted one-shot flag. Either being
 // non-zero/true means the prompt is either unnecessary or already spent.
+//
+// `skipCoreChecks` and `interactivePrompts` come from the command line
+// (--skip-core) and its non-interactive mode, and they exist so automation never
+// has to answer a modal prompt. Offering anyway parks the process on a dialog it
+// cannot close, which is how the macOS smoke run came to hang: it passes both
+// flags plus --quit-after-ms, and the app therefore never reached the timer that
+// was supposed to quit it.
 inline StartupCorePromptDecision decideStartupCorePrompt(
     int existingCoreCount,
-    bool promptAlreadyShown)
+    bool promptAlreadyShown,
+    bool skipCoreChecks = false,
+    bool interactivePrompts = true)
 {
+    if (skipCoreChecks || !interactivePrompts) {
+        return StartupCorePromptDecision::SkipNoPrompt;
+    }
+
     if (existingCoreCount > 0 || promptAlreadyShown) {
         return StartupCorePromptDecision::SkipNoPrompt;
     }
