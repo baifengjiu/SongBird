@@ -84,9 +84,33 @@ function Test-LooksLikeQtHeader {
     return $false
 }
 
+# The walk below re-reads every file once per Q_OS_* user, so the same header is read nineteen
+# times over, and re-resolves every include against the filesystem on each of those passes.
+# That is tens of thousands of stat calls for one check, and on the Intel macOS runner -- where
+# the whole Test step ran roughly seven times slower than on arm64 -- the check died four times
+# out of five with ctest reporting the test as failed and not a byte of output. Both caches
+# collapse that to a single pass over each distinct file, which is not a fix for whatever killed
+# it but removes the only part of this script whose cost is proportional to the runner's speed.
+$fileLinesCache = @{}
+$includeTargetsCache = @{}
+
+function Get-FileLines {
+    param([string]$Path)
+
+    if (-not $fileLinesCache.ContainsKey($Path)) {
+        $fileLinesCache[$Path] = [System.IO.File]::ReadAllLines($Path)
+    }
+    return $fileLinesCache[$Path]
+}
+
 # Resolve an include to the project files it could name. Empty means a system or Qt header.
 function Get-IncludeTargets {
     param([string]$Target, [string]$IncludingFile, [hashtable]$HeaderIndex)
+
+    $cacheKey = "$IncludingFile`0$Target"
+    if ($includeTargetsCache.ContainsKey($cacheKey)) {
+        return $includeTargetsCache[$cacheKey]
+    }
 
     $resolved = New-Object System.Collections.Generic.List[string]
     $normalized = $Target.Replace('\', '/')
@@ -114,7 +138,9 @@ function Get-IncludeTargets {
         }
     }
 
-    return @($resolved | Select-Object -Unique)
+    $result = @($resolved | Select-Object -Unique)
+    $includeTargetsCache[$cacheKey] = $result
+    return $result
 }
 
 # Walk the include closure of one file and report the Qt headers reachable from it.
@@ -132,7 +158,7 @@ function Get-QtHeaderHits {
             continue
         }
 
-        $lines = [System.IO.File]::ReadAllLines($current)
+        $lines = Get-FileLines -Path $current
         foreach ($line in $lines) {
             $match = $includePattern.Match($line)
             if (-not $match.Success) {
