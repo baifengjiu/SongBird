@@ -519,10 +519,19 @@ jobs:
           gh release download $coreTag --repo SagerNet/sing-box --pattern $coreAsset --output "$stage/core.zip" --clobber
           if ($LASTEXITCODE -ne 0) { throw "Could not download $coreAsset." }
           Expand-Archive -Path "$stage/core.zip" -DestinationPath "$stage/core" -Force
-          if (-not (Test-Path "$stage/core/sing-box.exe")) {
+          # The archive holds a top-level directory (sing-box-<version>-windows-amd64)
+          # with the executable plus the siblings it needs: libcronet.dll, which the
+          # executable imports, and the LICENSE that redistributing it requires.
+          # Locate the executable rather than spelling out a layout upstream is free
+          # to change -- a hard-coded "core/sing-box.exe" silently stopped matching
+          # when the archive grew that directory.
+          $coreDir = Get-ChildItem -Path "$stage/core" -Recurse -Filter 'sing-box.exe' -File |
+            Select-Object -First 1 | ForEach-Object { $_.DirectoryName }
+          if (-not $coreDir) {
             throw "$coreAsset did not unpack a sing-box.exe."
           }
-          Copy-Item "$stage/core/sing-box.exe" "$stage/sing-box.exe" -Force
+          Write-Host "offline bundle: core directory $(Split-Path $coreDir -Leaf)"
+          Copy-Item "$coreDir\*" "$stage" -Recurse -Force
           Remove-Item "$stage/core.zip", "$stage/core" -Recurse -Force
 
           # The rule-set tags are derived rather than hard-coded:
@@ -573,6 +582,10 @@ jobs:
             'Install: unpack this folder next to SongBird.exe. SongBird.exe finds the',
             'core next to itself, and sing-box reads rule-set/*.srs from the same',
             'directory instead of downloading them.',
+            '',
+            'The core directory is the package as upstream published it, so keep',
+            'its files together: sing-box.exe imports libcronet.dll, and the',
+            'LICENSE travels with it because the core is redistributed here.',
             '',
             'The core and rule-sets are still updatable afterwards through',
             'Settings > Core and Settings > Geodata.'
