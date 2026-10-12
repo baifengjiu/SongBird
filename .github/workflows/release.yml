@@ -472,11 +472,130 @@ jobs:
         shell: pwsh
         run: Copy-Item build/src/SongBird.exe songbird.exe -Force
 
+      # The single exe carries no core and no geodata, so a user whose network
+      # cannot reach GitHub -- directly or through one of the three mirrors
+      # buildGitHubMirrorCandidateUrls() tries -- ends up with a client that
+      # starts and connects to nothing. This stages a second, opt-in asset that
+      # bundles the sing-box core and the rule-set databases the built-in
+      # routing profiles reference.
+      #
+      # No application change is needed to consume it: CoreDiscoveryService
+      # already looks for the core in the application directory, and
+      # SingBoxRoutingConfigFragments::resolveLocalSingBoxRuleSetPath() already
+      # prefers <app dir>/rule-set/<tag>.srs over the remote URL. Dropping the
+      # unpacked folder next to SongBird.exe is the whole install.
+      - name: Stage offline bundle asset
+        id: stage-offline-bundle
+        # Every other build pulls sing-box and the rule-set files from upstream, and
+        # this step throws rather than ship a bundle with a hole in it, so a transient
+        # upstream failure would redden a plain main push and the twice-weekly cache
+        # keep-alive for reasons that have nothing to do with the commit. A release is
+        # the only consumer, so gate it there.
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # This step is tag-gated, so the ref is always refs/tags/v<version>.
+          $version = '${{ github.ref_name }}' -replace '^v', ''
+
+          $stage = 'offline-bundle'
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path "$stage/rule-set" -Force | Out-Null
+          Copy-Item build/src/SongBird.exe "$stage/SongBird.exe" -Force
+
+          # sing-box publishes per-platform archives; the Windows one unwraps to a
+          # bare "sing-box.exe", which is exactly the name in
+          # SingBoxCoreDescriptor::executableNames and the only core that runs TUIC,
+          # AnyTLS and Naive -- so it is the one worth shipping offline.
+          $coreTag = gh api "repos/SagerNet/sing-box/releases/latest" --jq '.tag_name'
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhitepace($coreTag)) {
+            throw 'Could not resolve the latest sing-box release.'
+          }
+          $coreTag = $coreTag.Trim()
+          $coreAsset = 'sing-box-' + ($coreTag -replace '^v', '') + '-windows-amd64.zip'
+          Write-Host "offline bundle: sing-box $coreTag ($coreAsset)"
+          gh release download $coreTag --repo SagerNet/sing-box --pattern $coreAsset --output "$stage/core.zip" --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Could not download $coreAsset." }
+          Expand-Archive -Path "$stage/core.zip" -DestinationPath "$stage/core" -Force
+          if (-not (Test-Path "$stage/core/sing-box.exe")) {
+            throw "$coreAsset did not unpack a sing-box.exe."
+          }
+          Copy-Item "$stage/core/sing-box.exe" "$stage/sing-box.exe" -Force
+          Remove-Item "$stage/core.zip", "$stage/core" -Recurse -Force
+
+          # The rule-set tags are derived rather than hard-coded:
+          # RoutingProfiles.cpp is the same source the app reads at runtime, so a
+          # list typed into the workflow would drift from it silently. Absent
+          # entries are the ones isSingBoxRuleSetPublishedUpstream() drops -- keep
+          # the two in step, and fail here loudly when upstream drops a tag so the
+          # bundle is never published half-full.
+          $text = Get-Content -Raw -LiteralPath 'src/domain/models/RoutingProfiles.cpp'
+          if ([string]::IsNullOrWhiteSpace($text)) {
+            throw 'Could not read src/domain/models/RoutingProfiles.cpp.'
+          }
+          $wanted = New-Object System.Collections.Generic.List[string]
+          foreach ($prefix in @('geosite', 'geoip')) {
+            foreach ($m in [regex]::Matches($text, ('(?<=' + $prefix + ':)[A-Za-z0-9\-!]+'))) {
+              $wanted.Add($prefix + '-' + $m.Value)
+            }
+          }
+          $unavailable = @('geosite-gfw', 'geoip-telegram', 'geoip-private')
+          $tags = @($wanted | Where-Object { $unavailable -notcontains $_ } | Sort-Object -Unique)
+          if ($tags.Count -eq 0) {
+            throw 'No rule-set tags could be derived from RoutingProfiles.cpp.'
+          }
+          $fetched = 0
+          foreach ($tag in $tags) {
+            $repo = if ($tag.StartsWith('geosite-')) { 'SagerNet/sing-geosite' } else { 'SagerNet/sing-geoip' }
+            $url = 'https://raw.githubusercontent.com/' + $repo + '/rule-set/' + $tag + '.srs'
+            $target = "$stage/rule-set/$tag.srs"
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $target -MaximumRedirection 5
+              if ($LASTEXITCODE -ne 0 -or -not (Test-Path $target) -or (Get-Item $target).Length -le 0) {
+                throw 'Empty response.'
+              }
+              $fetched++
+              Write-Host "offline bundle: $tag ($([math]::Round((Get-Item $target).Length / 1KB)) KB)"
+            } catch {
+              throw "Could not fetch $tag from $url -- upstream may have renamed it; add it to `$unavailable if it is gone for good."
+            }
+          }
+          Write-Host "offline bundle: $fetched of $($tags.Count) rule-set tag(s)"
+
+          $readme = @(
+            'SongBird offline bundle (Windows, x64)',
+            '',
+            'Contains SongBird.exe, the sing-box core and the rule-set databases the',
+            'built-in routing profiles reference. Nothing here runs on its own.',
+            '',
+            'Install: unpack this folder next to SongBird.exe. SongBird.exe finds the',
+            'core next to itself, and sing-box reads rule-set/*.srs from the same',
+            'directory instead of downloading them.',
+            '',
+            'The core and rule-sets are still updatable afterwards through',
+            'Settings > Core and Settings > Geodata.'
+          )
+          Set-Content -LiteralPath "$stage/README.txt" -Value $readme
+
+          $name = 'SongBird-' + $version + '-offline-win-x64.zip'
+          Compress-Archive -Path "$stage/*" -DestinationPath $name -Force
+          Add-Content -Path $env:GITHUB_OUTPUT -Value ('offline_asset=' + $name)
+          Write-Host "offline bundle: staged $name ($([math]::Round((Get-Item $name).Length / 1MB)) MB)"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: songbird-exe
           path: songbird.exe
+
+      - name: Upload offline bundle artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: songbird-offline-bundle
+          path: ${{ steps.stage-offline-bundle.outputs.offline_asset }}
 
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -497,6 +616,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             gh release upload $tag songbird.exe --clobber
           }
+          # The offline bundle is opt-in: the exe stays the primary asset, and it only
+          # reaches the release together with the exe it belongs to.
+          gh release upload $tag "${{ steps.stage-offline-bundle.outputs.offline_asset }}" --clobber
 
   # A macOS build cannot share the job above: that one is a vcpkg build whose cost is
   # dominated by a cache the macOS side has nothing to put in, and its Qt5 comes from

@@ -304,6 +304,22 @@ songbird_add_qt_test(songbird_server_collection_coordinator_tests server-collect
         Qt${QT_VERSION_MAJOR}::Widgets
 )
 
+# isSingBoxRuleSetPublishedUpstream() is the list of rule-set categories the vendor does not
+# publish, so a rule naming one of them can never match. It is pure data with no I/O, so it gets
+# a target of its own rather than dragging in the whole sing-box config chain.
+set(SONGBIRD_SINGBOX_RULE_SET_AVAILABILITY_TEST_SOURCES
+    SingBoxRuleSetAvailabilityTests.cpp
+    ../src/backends/singbox/SingBoxRuleSetAvailability.h
+)
+
+songbird_add_qt_test(songbird_singbox_rule_set_availability_tests singbox-rule-set-availability
+    SOURCES
+        ${SONGBIRD_SINGBOX_RULE_SET_AVAILABILITY_TEST_SOURCES}
+    LIBRARIES
+        Qt${QT_VERSION_MAJOR}::Test
+        Qt${QT_VERSION_MAJOR}::Widgets
+)
+
 set(SONGBIRD_STARTUP_ADMIN_ELEVATION_TEST_SOURCES
     StartupAdminElevationTests.cpp
 )
@@ -770,6 +786,7 @@ songbird_add_qt_test(songbird_system_proxy_mode_tests system-proxy-mode
 set(SONGBIRD_STARTUP_SEQUENCER_TEST_SOURCES
     StartupSequencerTests.cpp
     ../src/common/StartupSequencer.h
+    ../src/app/StartupCorePromptPolicy.h
     ../src/app/StartupWindowPolicy.h
 )
 

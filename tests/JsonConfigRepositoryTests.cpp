@@ -615,6 +615,7 @@ void JsonConfigRepositoryTests::saveWritesCanonicalSongBirdStructure()
     config.ui().mainServerQrSplitPercent = 75;
     config.ui().mainQrPreviewVisible = true;
     config.ui().mainProxyEnabled = true;
+    config.ui().coreSetupPromptShown = true;
     config.ui().mainColumnWidths.insert(QStringLiteral("address"), 260);
     config.tun().tunModeItem.enableTun = true;
     config.tun().tunModeItem.autoRoute = false;
@@ -683,6 +684,7 @@ void JsonConfigRepositoryTests::saveWritesCanonicalSongBirdStructure()
     QCOMPARE(savedStateUi.value(QStringLiteral("mainLocationX")).toInt(), 100);
     QCOMPARE(savedStateUi.value(QStringLiteral("mainSizeWidth")).toInt(), 1440);
     QVERIFY(savedStateUi.value(QStringLiteral("mainProxyEnabled")).toBool());
+    QVERIFY(savedStateUi.value(QStringLiteral("coreSetupPromptShown")).toBool());
     QVERIFY(!savedStateUi.contains(QStringLiteral("themeName")));
 
     const QJsonObject savedDefaults = savedRoot.value(QStringLiteral("defaults")).toObject();
@@ -713,6 +715,7 @@ void JsonConfigRepositoryTests::saveWritesCanonicalSongBirdStructure()
     const Config reloaded = repository.load();
     QVERIFY(reloaded.routeOnly);
     QCOMPARE(reloaded.ui().mainSelectedSubId, QStringLiteral("sub-1"));
+    QVERIFY(reloaded.ui().coreSetupPromptShown);
     QCOMPARE(reloaded.collection().servers.size(), 1);
     QCOMPARE(reloaded.collection().servers.constFirst().subId, QStringLiteral("sub-1"));
 }

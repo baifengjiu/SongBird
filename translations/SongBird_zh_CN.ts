@@ -881,6 +881,18 @@ Restart SongBird and use the downloaded package to update to the new version.</s
         <source>Failed to remove SongBird TUN adapters (%1): %2</source>
         <translation>移除 SongBird TUN 网卡失败（%1）：%2</translation>
     </message>
+    <message>
+        <source>No proxy core found</source>
+        <translation>未找到代理内核</translation>
+    </message>
+    <message>
+        <source>SongBird needs the %1 core binary to run a server, but none was found next to the application, the working directory or the configuration file. Download and install it now?</source>
+        <translation>SongBird 需要 %1 内核可执行文件才能运行服务器，但在应用程庌目录、工作目录和配置文件目录中均未找到。现在下载并安装吗？</translation>
+    </message>
+    <message>
+        <source>No core executable was installed. Use Settings &gt; Core to download one later.</source>
+        <translation>尚未安装内核可执行文件。可稍后通过「设置 &gt; 内核」下载。</translation>
+    </message>
 </context>
 <context>
     <name>AppPlatform</name>

@@ -9,9 +9,11 @@ SongBird manages V2Ray-style proxy servers — VMess, VLESS, Shadowsocks, Trojan
 | Platform | File | Where |
 |---|---|---|
 | Windows 10/11 (64-bit) | `songbird.exe` — portable, no installer | [latest release](https://github.com/o3ku/SongBird/releases/latest) |
+| Windows 10/11 (64-bit), offline | `SongBird-<version>-offline-win-x64.zip` — the exe plus the sing-box core and its rule-sets | same release, optional |
 | macOS (Apple silicon and Intel) | `SongBird-macos-universal.dmg` | [v2.5.0-beta2](https://github.com/o3ku/SongBird/releases/tag/v2.5.0-beta2) — pre-release |
 
 - `songbird.exe` is self-contained. There is nothing to install first: no runtime, no installer, no registry entry.
+- Neither package bundles a proxy core, so the first start asks whether to download the sing-box core. The offline zip is for a machine that cannot reach GitHub: unpack it **next to** `SongBird.exe` and the core and rule-sets are already there, no download needed. They stay updatable afterwards through Settings.
 - The macOS package is a **universal** DMG, so one file runs on both Apple silicon and Intel Macs. It is published as a pre-release while macOS support is still being shaken out.
 - Both packages are built by CI from the tagged commit. Neither sends telemetry: the only outbound traffic is the proxy itself, plus subscription, core and geodata downloads and a manual update check.
 
@@ -36,6 +38,7 @@ SongBird manages V2Ray-style proxy servers — VMess, VLESS, Shadowsocks, Trojan
 **Running a proxy**
 
 - Start and stop the core with a single toggle, with live logs in the main window.
+- On first launch, when no core is found anywhere, SongBird offers to download one.
 - Toggle the **Windows** or **macOS** system proxy, and grant UWP loopback exemptions on Windows.
 - **TUN mode** on Windows.
 - Configure routing rules and DNS behaviour: separate remote, direct and bootstrap DNS servers (including DNS-over-HTTPS endpoints), domain strategy for direct and proxied traffic, a hosts table, and expected direct IPs.

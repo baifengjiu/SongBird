@@ -25,6 +25,7 @@ QJsonObject toUiStateObject(const Config& config)
     writeIfNotDefault(ui, QStringLiteral("mainServerQrSplitPercent"), config.ui().mainServerQrSplitPercent, 78);
     writeIfTrue(ui, QStringLiteral("mainQrPreviewVisible"), config.ui().mainQrPreviewVisible);
     writeIfTrue(ui, QStringLiteral("mainProxyEnabled"), config.ui().mainProxyEnabled);
+    writeIfTrue(ui, QStringLiteral("coreSetupPromptShown"), config.ui().coreSetupPromptShown);
 
     QJsonObject mainColumnWidths;
     for (auto it = config.ui().mainColumnWidths.constBegin(); it != config.ui().mainColumnWidths.constEnd(); ++it) {
@@ -90,6 +91,8 @@ void read(const QJsonObject& root, Config& config)
             readBool(ui, QStringLiteral("mainQrPreviewVisible"), config.ui().mainQrPreviewVisible);
         config.ui().mainProxyEnabled =
             readBool(ui, QStringLiteral("mainProxyEnabled"), config.ui().mainProxyEnabled);
+        config.ui().coreSetupPromptShown =
+            readBool(ui, QStringLiteral("coreSetupPromptShown"), config.ui().coreSetupPromptShown);
 
         const QJsonObject mainColumnWidths = readObject(ui, QStringLiteral("mainColumnWidths"));
         for (auto it = mainColumnWidths.constBegin(); it != mainColumnWidths.constEnd(); ++it) {

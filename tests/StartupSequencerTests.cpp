@@ -1,5 +1,6 @@
 #include <QtTest>
 
+#include "app/StartupCorePromptPolicy.h"
 #include "app/StartupWindowPolicy.h"
 #include "common/StartupSequencer.h"
 
@@ -15,6 +16,9 @@ private slots:
     void emptySequenceCompletesImmediately();
     void rerunResetsTheExecutionTrace();
     void decideStartupWindowActionFollowsHideRequestAndTrayAvailability();
+    void decideStartupCorePromptOffersDownloadWhenNothingWasFound();
+    void decideStartupCorePromptSkipsWhenAnyCoreExists();
+    void decideStartupCorePromptSkipsWhenTheOfferWasAlreadySpent();
 };
 
 void StartupSequencerTests::runsStepsInDeclarationOrder()
@@ -126,6 +130,30 @@ void StartupSequencerTests::decideStartupWindowActionFollowsHideRequestAndTrayAv
     QCOMPARE(decideStartupWindowAction(false, false), StartupWindowAction::ShowNormally);
     QCOMPARE(decideStartupWindowAction(true, true), StartupWindowAction::HideToTray);
     QCOMPARE(decideStartupWindowAction(true, false), StartupWindowAction::ShowMinimizedWithoutTray);
+}
+
+void StartupSequencerTests::decideStartupCorePromptOffersDownloadWhenNothingWasFound()
+{
+    QCOMPARE(
+        decideStartupCorePrompt(0, false),
+        StartupCorePromptDecision::OfferCoreDownload);
+}
+
+void StartupSequencerTests::decideStartupCorePromptSkipsWhenAnyCoreExists()
+{
+    QCOMPARE(
+        decideStartupCorePrompt(1, false),
+        StartupCorePromptDecision::SkipNoPrompt);
+    QCOMPARE(
+        decideStartupCorePrompt(3, false),
+        StartupCorePromptDecision::SkipNoPrompt);
+}
+
+void StartupSequencerTests::decideStartupCorePromptSkipsWhenTheOfferWasAlreadySpent()
+{
+    QCOMPARE(
+        decideStartupCorePrompt(0, true),
+        StartupCorePromptDecision::SkipNoPrompt);
 }
 
 QTEST_MAIN(StartupSequencerTests)

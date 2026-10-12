@@ -102,6 +102,7 @@ private:
     void adoptManagedSystemProxyOnStartup();
     void presentMainWindowOnStartup();
     void scheduleAppUpdateChecks();
+    void offerCoreDownloadOnStartup();
 
     void syncWindow();
     void syncStatusIndicators();

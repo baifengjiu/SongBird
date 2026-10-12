@@ -61,6 +61,10 @@ struct UiConfigState {
     bool mainQrPreviewVisible = false;
     bool mainProxyEnabled = false;
     QString autoSelectionStrategy = QStringLiteral("lowestLatency");
+    // One-shot flag for the startup prompt that offers to download a core when
+    // none was found anywhere. Persisted so the offer is spent after the first
+    // launch instead of returning on every start.
+    bool coreSetupPromptShown = false;
 };
 
 struct RootConfigState {

@@ -7,6 +7,7 @@
 #include "app/ApplicationRestartCoordinator.h"
 #include "appcore/AppRuntimeResolver.h"
 #include "app/RuntimeStateSnapshotBuilder.h"
+#include "app/StartupCorePromptPolicy.h"
 #include "app/StartupWindowPolicy.h"
 #include "appcore/BackgroundTaskCoordinator.h"
 #include "appcore/BackgroundThreadTracker.h"
@@ -225,6 +226,7 @@ bool AppBootstrap::run()
     sequencer.addStep(QStringLiteral("backup-config"), [this]() { autoBackupCurrentConfig(); });
     sequencer.addStep(QStringLiteral("adopt-managed-system-proxy"), [this]() { adoptManagedSystemProxyOnStartup(); });
     sequencer.addStep(QStringLiteral("present-main-window"), [this]() { presentMainWindowOnStartup(); });
+    sequencer.addStep(QStringLiteral("offer-core-download-on-startup"), [this]() { offerCoreDownloadOnStartup(); });
     sequencer.addStep(QStringLiteral("schedule-app-update-checks"), [this]() { scheduleAppUpdateChecks(); });
 
     return sequencer.runAll();
@@ -286,6 +288,60 @@ void AppBootstrap::scheduleAppUpdateChecks()
         checkAppUpdates(false);
     });
     appUpdateTimer->start();
+}
+
+void AppBootstrap::offerCoreDownloadOnStartup()
+{
+    if (objects_->coreUpdateCoordinator == nullptr || objects_->mainWindow == nullptr) {
+        return;
+    }
+
+    // A user who installed the portable exe and cannot reach GitHub (directly or
+    // through one of the mirrors) has no way to get a core: the log only lists the
+    // file names it expected. Offer the install once, and remember that the offer
+    // was spent so a declined prompt does not come back on every launch.
+    const int existingCoreCount = static_cast<int>(detectExistingCoreTypes().size());
+    if (decideStartupCorePrompt(existingCoreCount, config_.ui().coreSetupPromptShown)
+        != StartupCorePromptDecision::OfferCoreDownload) {
+        return;
+    }
+
+    config_.ui().coreSetupPromptShown = true;
+    persistUiState();
+
+    const QList<CoreType> preferredCoreTypes = sortedCatalogCoreTypes();
+    if (preferredCoreTypes.isEmpty()) {
+        return;
+    }
+
+    // sing-box is the lowest protocolPriority in the catalog, and it is the only
+    // core that runs TUIC, AnyTLS and Naive, so it is the right one to offer.
+    const CoreType coreType = preferredCoreTypes.first();
+    const QString title = QCoreApplication::translate("AppBootstrap", "No proxy core found");
+    // Deliberately one line: an embedded "\n" would make the source string an
+    // escape sequence the hand-maintained .ts has to reproduce verbatim, and
+    // QMessageBox already wraps long prompts on its own.
+    const QString prompt = QCoreApplication::translate(
+        "AppBootstrap",
+        "SongBird needs the %1 core binary to run a server, but none was found next to the "
+        "application, the working directory or the configuration file. Download and install it now?")
+        .arg(coreTypeDisplayName(coreType));
+    if (DialogUtils::askYesNoQuestion(objects_->mainWindow.get(), title, prompt, QMessageBox::Yes)
+        != QMessageBox::Yes) {
+        appendResult(OperationResult::ok(QCoreApplication::translate(
+            "AppBootstrap",
+            "No core executable was installed. Use Settings > Core to download one later.")));
+        return;
+    }
+
+    CoreUpdateCoordinator::Request request;
+    request.coreTypeValue = static_cast<int>(coreType);
+    request.startAfterSuccess = false;
+    request.progressContext = objects_->mainWindow.get();
+    request.dialogParent = objects_->mainWindow.get();
+    // The dialog above already asked, so the coordinator's own confirm step is skipped.
+    request.skipConfirmation = true;
+    objects_->coreUpdateCoordinator->updateCore(request);
 }
 
 // wireMainWindow() and the signal-wiring methods it drives now live in

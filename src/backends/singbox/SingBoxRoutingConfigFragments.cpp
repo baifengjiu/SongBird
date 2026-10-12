@@ -10,6 +10,7 @@
 #include <QStringList>
 
 #include "backends/singbox/SingBoxConfigFragments.h"
+#include "backends/singbox/SingBoxRuleSetAvailability.h"
 #include "common/AppPaths.h"
 #include "common/GitHubUrls.h"
 #include "common/SingBoxPaths.h"
@@ -121,14 +122,9 @@ QJsonObject SingBoxRoutingConfigFragments::buildRoute(const Config& config, cons
 
 void SingBoxRoutingConfigFragments::migrateGeoToRuleSet(QJsonObject& root)
 {
-    const QSet<QString> kUnavailableRuleSets = {
-        QStringLiteral("geosite-gfw"),
-        QStringLiteral("geoip-telegram"),
-    };
-
     QSet<QString> allRuleSetTags;
 
-    auto processRules = [&allRuleSetTags, &kUnavailableRuleSets](QJsonArray& rules) {
+    auto processRules = [&allRuleSetTags](QJsonArray& rules) {
         for (int i = 0; i < rules.size(); ++i) {
             QJsonObject rule = rules[i].toObject();
             QJsonArray ruleSetTags = rule.take(QStringLiteral("rule_set")).toArray();
@@ -137,10 +133,10 @@ void SingBoxRoutingConfigFragments::migrateGeoToRuleSet(QJsonObject& root)
             if (rule.contains(QStringLiteral("geosite"))) {
                 QJsonArray values = rule.take(QStringLiteral("geosite")).toArray();
                 for (const QJsonValue& v : values) {
-                    const QString tag = QStringLiteral("geosite-%1").arg(v.toString());
-                    if (kUnavailableRuleSets.contains(tag)) {
-                        continue;
-                    }
+                const QString tag = QStringLiteral("geosite-%1").arg(v.toString());
+                if (!isSingBoxRuleSetPublishedUpstream(tag)) {
+                    continue;
+                }
                     ruleSetTags.append(tag);
                     allRuleSetTags.insert(tag);
                 }
@@ -151,7 +147,7 @@ void SingBoxRoutingConfigFragments::migrateGeoToRuleSet(QJsonObject& root)
                 QJsonArray values = rule.take(QStringLiteral("geoip")).toArray();
                 for (const QJsonValue& v : values) {
                     const QString tag = QStringLiteral("geoip-%1").arg(v.toString());
-                    if (kUnavailableRuleSets.contains(tag)) {
+                    if (!isSingBoxRuleSetPublishedUpstream(tag)) {
                         continue;
                     }
                     ruleSetTags.append(tag);
