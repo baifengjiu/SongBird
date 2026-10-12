@@ -100,13 +100,6 @@ jobs:
           ctest --test-dir build -LE smoke --output-on-failure \
             || ctest --test-dir build -LE smoke --output-on-failure --rerun-failed
 
-          # -LE smoke matches the Windows job: the end-to-end smoke test drives a real core
-          # over the network, which is not something a verification run should depend on.
-          # The platform plugin the tests are given comes from tests/CMakeLists.txt, which
-          # picks the name per platform -- hardcoding the Windows one here is what a test
-          # cannot survive, since it dies before its first assertion.
-          ctest --test-dir build -LE smoke --output-on-failure
-
       - name: Deploy Qt into the bundle
         run: |
           # Copies the frameworks the executable links to into Contents/Frameworks and
