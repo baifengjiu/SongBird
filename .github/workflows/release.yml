@@ -510,7 +510,7 @@ jobs:
           # SingBoxCoreDescriptor::executableNames and the only core that runs TUIC,
           # AnyTLS and Naive -- so it is the one worth shipping offline.
           $coreTag = gh api "repos/SagerNet/sing-box/releases/latest" --jq '.tag_name'
-          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhitepace($coreTag)) {
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($coreTag)) {
             throw 'Could not resolve the latest sing-box release.'
           }
           $coreTag = $coreTag.Trim()
