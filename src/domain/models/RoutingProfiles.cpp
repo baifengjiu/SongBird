@@ -68,11 +68,6 @@ QList<RoutingItem> RoutingProfiles::builtinRoutingItems()
         QT_TRANSLATE_NOOP("RoutingProfiles", "Bypass CN"),
         QList<RoutingRule>{
             createRoutingRule(
-                QStringLiteral("direct"),
-                QStringList{
-                    QStringLiteral("domain:example-example.com"),
-                    QStringLiteral("domain:example-example2.com")}),
-            createRoutingRule(
                 QStringLiteral("block"),
                 QStringList{QStringLiteral("geosite:category-ads-all")}),
             createRoutingRule(
