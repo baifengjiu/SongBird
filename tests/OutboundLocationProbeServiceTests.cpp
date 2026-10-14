@@ -124,6 +124,7 @@ class OutboundLocationProbeServiceTests : public QObject
     Q_OBJECT
 
 private slots:
+    void productionBudgetStaysTwoRounds();
     void failureKeepsEveryHostReasonInsteadOfOnlyTheDeadline();
     void hostThatNeverAnswersDoesNotExtendTheProbePastItsBudget();
     void locationIsParsedFromASuccessfulProbe();
@@ -133,7 +134,20 @@ private:
     static LocationProbeTimings shortTimings();
 };
 
-// The production constants add up to twelve seconds before the deadline is reached, so the
+// The probe is display-only, so its budget is a cost the user pays on every activation for a flag
+// they may not even see. Eight rounds against five rate-limiting services was up to forty requests
+// per launch; this guards the reduction rather than leaving it to a comment.
+void OutboundLocationProbeServiceTests::productionBudgetStaysTwoRounds()
+{
+    QCOMPARE(OutboundLocationProbeService::LocationProbeMaxRounds, 2);
+    QVERIFY2(
+        OutboundLocationProbeService::LocationProbeTotalTimeoutMs
+            <= OutboundLocationProbeService::LocationProbeMaxRounds
+                * OutboundLocationProbeService::LocationProbeTimeoutMs,
+        "the total budget must still admit the rounds the round cap allows");
+}
+
+// The production constants add up to eight seconds before the deadline is reached, so the
 // timeout branch is driven with a budget short enough to assert on.
 LocationProbeTimings OutboundLocationProbeServiceTests::shortTimings()
 {

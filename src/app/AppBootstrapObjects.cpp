@@ -18,6 +18,7 @@
 #include "platform/IAutoRunService.h"
 #include "platform/ISystemProxyService.h"
 #include "appcore/IUserFeedback.h"
+#include "appcore/OutboundLivenessProbeService.h"
 #include "appcore/OutboundLocationProbeService.h"
 #include "appcore/ProxyRuntimeInterfaces.h"
 #include "appcore/ProxySession.h"

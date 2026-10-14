@@ -9,6 +9,7 @@
 
 #include "appcore/AppRuntimeResolver.h"
 #include "appcore/BackgroundTaskCoordinator.h"
+#include "appcore/OutboundLivenessProbeService.h"
 #include "appcore/OutboundLocationProbeService.h"
 #include "appcore/ProxyRuntimeInterfaces.h"
 #include "appcore/ProxySession.h"
@@ -30,6 +31,7 @@ void AppBootstrap::wireProxyStack()
         *objects_->auxiliaryCoreProcessHost,
         *objects_->clientConfigWriter,
         *objects_->outboundLocationProbeService,
+        *objects_->outboundLivenessProbeService,
         *objects_->backgroundTasks,
         *objects_->appRuntimeResolver,
         *objects_->runtimeEnvironment,

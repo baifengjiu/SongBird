@@ -503,6 +503,37 @@ songbird_add_qt_test(songbird_outbound_location_probe_tests outbound-location-pr
         Qt${QT_VERSION_MAJOR}::Network
 )
 
+# The startup gate. The case that matters is the one the old single-probe design got wrong: every
+# https host failing must not sink the verdict while a plain http host still answers, because the
+# verdict is a status code and never a body.
+songbird_add_qt_test(songbird_outbound_liveness_probe_tests outbound-liveness-probe
+    SOURCES
+        OutboundLivenessProbeServiceTests.cpp
+    LIBRARIES
+        Qt${QT_VERSION_MAJOR}::Test
+        Qt${QT_VERSION_MAJOR}::Network
+)
+
+# The shape a failed outbound leaves behind: certificate mismatch, an unreachable node, or a tunnel
+# that carried nothing. It is pure text logic over the wording the cores and Qt already print, so it
+# gets a target of its own rather than being asserted through a live probe.
+songbird_add_qt_test(songbird_outbound_error_classifier_tests outbound-error-classifier
+    SOURCES
+        OutboundErrorClassifierTests.cpp
+    LIBRARIES
+        Qt${QT_VERSION_MAJOR}::Test
+)
+
+# The Active rule itself. It lives in appcore/ as a free function precisely so it can be tested:
+# RuntimeStateSnapshotBuilder is in app/ and only compiled into the app targets, so a rule that
+# stayed there would never be reachable from a test.
+songbird_add_qt_test(songbird_proxy_ui_state_decision_tests proxy-ui-state-decision
+    SOURCES
+        ProxyUiStateDecisionTests.cpp
+    LIBRARIES
+        Qt${QT_VERSION_MAJOR}::Test
+)
+
 set(SONGBIRD_CORE_UPDATE_COORDINATOR_TEST_SOURCES
     CoreUpdateCoordinatorTests.cpp
     ../src/app/CoreUpdateCoordinator.h

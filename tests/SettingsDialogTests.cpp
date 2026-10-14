@@ -41,6 +41,8 @@ private slots:
     void defaultAllowInsecureCheckboxRoundTripsConfig();
     void defaultUserAgentComboRoundTripsConfig();
     void defaultFingerprintComboRoundTripsConfig();
+    void speedPingTestUrlRoundTripsConfig();
+    void skipOutboundCheckRoundTripsConfig();
     void themeComboRoundTripsConfig();
     void tunSettingsRoundTripsConfig();
     void tunToggleControlsDependentFields();
@@ -340,6 +342,49 @@ void SettingsDialogTests::defaultFingerprintComboRoundTripsConfig()
 
     const Config updated = dialog.config();
     QCOMPARE(updated.dns().defaultFingerprint, QStringLiteral("edge"));
+}
+
+// The endpoint the availability checks probe has existed in the config since it was added, but
+// there was no field to set it -- so a user whose network blocks the built-in hosts had no way to
+// point the check somewhere it works.
+void SettingsDialogTests::speedPingTestUrlRoundTripsConfig()
+{
+    Config config;
+    config.defaults().speedPingTestUrl = QStringLiteral("https://example.com/generate_204");
+
+    SettingsDialog dialog;
+    dialog.setConfig(config);
+
+    auto* speedPingTestUrlEdit = dialog.findChild<QLineEdit*>(QStringLiteral("settingsSpeedPingTestUrlEdit"));
+    QVERIFY(speedPingTestUrlEdit != nullptr);
+    QCOMPARE(speedPingTestUrlEdit->text(), QStringLiteral("https://example.com/generate_204"));
+
+    // Trimmed on the way back in: a stray space in a URL is a silent failure at probe time.
+    speedPingTestUrlEdit->setText(QStringLiteral("  https://mirror.example/probe  "));
+
+    const Config updated = dialog.config();
+    QCOMPARE(updated.defaults().speedPingTestUrl, QStringLiteral("https://mirror.example/probe"));
+}
+
+// The advanced escape hatch past the startup outbound gate. Off by default; the point of the test is
+// that the checkbox is wired to the config field the session actually reads.
+void SettingsDialogTests::skipOutboundCheckRoundTripsConfig()
+{
+    Config config;
+    QVERIFY(!config.skipOutboundCheck);
+
+    SettingsDialog dialog;
+    dialog.setConfig(config);
+
+    auto* skipOutboundCheck = dialog.findChild<QCheckBox*>(QStringLiteral("settingsSkipOutboundCheck"));
+    QVERIFY(skipOutboundCheck != nullptr);
+    QVERIFY(!skipOutboundCheck->isChecked());
+
+    skipOutboundCheck->setChecked(true);
+    QVERIFY(dialog.config().skipOutboundCheck);
+
+    skipOutboundCheck->setChecked(false);
+    QVERIFY(!dialog.config().skipOutboundCheck);
 }
 
 void SettingsDialogTests::themeComboRoundTripsConfig()

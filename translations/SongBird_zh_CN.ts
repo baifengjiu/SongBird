@@ -1653,6 +1653,14 @@ The running core will be stopped before installation if needed.</source>
 <context>
     <name>GeneralSettingsPageWidget</name>
     <message>
+        <source>Skip the outbound check on startup</source>
+        <translation>启动时跳过出站检查</translation>
+    </message>
+    <message>
+        <source>Speed test URL</source>
+        <translation>测速地址</translation>
+    </message>
+    <message>
         <source>Show the main window after startup</source>
         <translation>启动后显示主窗口</translation>
     </message>
@@ -1900,6 +1908,10 @@ The running core will be stopped before installation if needed.</source>
 <context>
     <name>MainWindow</name>
     <message>
+        <source>Location unknown</source>
+        <translation>位置未知</translation>
+    </message>
+    <message>
         <source>Main</source>
         <translation>主界面</translation>
     </message>
@@ -2091,6 +2103,29 @@ The running core will be stopped before installation if needed.</source>
     </message>
 </context>
 <context>
+    <name>OutboundLivenessProbeService</name>
+    <message>
+        <source>HTTP %1</source>
+        <translation>HTTP %1</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation>%1：%2</translation>
+    </message>
+    <message>
+        <source>No response.</source>
+        <translation>无响应。</translation>
+    </message>
+    <message>
+        <source>Outbound connection request timed out.</source>
+        <translation>出站连接请求超时。</translation>
+    </message>
+    <message>
+        <source>Outbound connection probe is unavailable.</source>
+        <translation>出站连接探测不可用。</translation>
+    </message>
+</context>
+<context>
     <name>ProxyAvailabilityCheckService</name>
     <message>
         <source>Availability check: %1 ms</source>
@@ -2100,8 +2135,52 @@ The running core will be stopped before installation if needed.</source>
 <context>
     <name>ProxySession</name>
     <message>
+        <source>Outbound check skipped</source>
+        <translation>已跳过出站检查</translation>
+    </message>
+    <message>
+        <source>Outbound check passed</source>
+        <translation>出站检查通过</translation>
+    </message>
+    <message>
+        <source>Outbound check failed</source>
+        <translation>出站检查失败</translation>
+    </message>
+    <message>
+        <source>DNS in effect</source>
+        <translation>当前生效的 DNS</translation>
+    </message>
+    <message>
+        <source>Outbound check waived: direct connectivity failed as well</source>
+        <translation>出站检查已放行：直连同样失败</translation>
+    </message>
+    <message>
+        <source>The outbound check could not be completed: this machine cannot reach the probe hosts directly either.</source>
+        <translation>出站检查未能完成：本机也无法直连探测主机。</translation>
+    </message>
+    <message>
+        <source>%1 The server certificate does not match the address.</source>
+        <translation>%1 服务器证书与地址不匹配。</translation>
+    </message>
+    <message>
+        <source>%1 The node could not be reached.</source>
+        <translation>%1 无法连接到该节点。</translation>
+    </message>
+    <message>
+        <source>%1 The tunnel was established but carries no traffic.</source>
+        <translation>%1 隧道已建立，但没有任何流量通过。</translation>
+    </message>
+    <message>
+        <source>Outbound connection check was skipped.</source>
+        <translation>已跳过出站连接检查。</translation>
+    </message>
+    <message>
         <source>TUN mode requires administrator privileges on Windows. Run SongBird as administrator before starting the core.</source>
         <translation>TUN 模式在 Windows 上需要管理员权限。请先以管理员身份运行 SongBird 再启动核心。</translation>
+    </message>
+    <message>
+        <source>Activating %1 | %2</source>
+        <translation>正在激活 %1 | %2</translation>
     </message>
     <message>
         <source>Environment cleanup</source>
@@ -2180,8 +2259,8 @@ The running core will be stopped before installation if needed.</source>
         <translation>核心已下载，但代理启动已取消。</translation>
     </message>
     <message>
-        <source>Check outbound location</source>
-        <translation>检查出站位置</translation>
+        <source>Check outbound connection</source>
+        <translation>检查出站连接</translation>
     </message>
     <message>
         <source>Apply system proxy</source>
@@ -2300,16 +2379,36 @@ The running core will be stopped before installation if needed.</source>
         <translation>核心尚未准备好进行出口位置检测。</translation>
     </message>
     <message>
-        <source>Detecting outbound IP location.</source>
-        <translation>正在检测出口 IP 位置。</translation>
-    </message>
-    <message>
         <source>Location probe port is unavailable.</source>
         <translation>位置探测端口不可用。</translation>
     </message>
     <message>
-        <source>Outbound location detection result is stale.</source>
-        <translation>出口位置检测结果已过期。</translation>
+        <source>Core is not ready for the outbound connection check.</source>
+        <translation>核心尚未准备好进行出站连接检查。</translation>
+    </message>
+    <message>
+        <source>Outbound connection check port is unavailable.</source>
+        <translation>出站连接检查端口不可用。</translation>
+    </message>
+    <message>
+        <source>Checking the outbound connection.</source>
+        <translation>正在检查出站连接。</translation>
+    </message>
+    <message>
+        <source>Detecting outbound IP location</source>
+        <translation>正在检测出口 IP 位置。</translation>
+    </message>
+    <message>
+        <source>Outbound connection check result is stale.</source>
+        <translation>出站连接检查结果已过期。</translation>
+    </message>
+    <message>
+        <source>Outbound connection unavailable.</source>
+        <translation>出站连接不可用。</translation>
+    </message>
+    <message>
+        <source>Outbound connection is reachable.</source>
+        <translation>出站连接可达。</translation>
     </message>
     <message>
         <source>Outbound location unavailable.</source>

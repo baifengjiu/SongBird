@@ -60,6 +60,7 @@ class AutoCoordinatorLogicTests : public QObject
     Q_OBJECT
 
 private slots:
+    void proxyActiveDependsOnActivationNotGeo();
     void normalizeSubscriptionUrlTrimsAndDropsComments();
     void normalizeSubscriptionUrlKeepsInlineHash();
     void normalizeAutoSelectionStrategyFallsBackToLowestLatency();
@@ -77,6 +78,15 @@ private slots:
     void reconcileReturnsFalseWhenAlreadyCurrentAndNoDuplicate();
     void reconcileSetsCurrentIndexIdWhenNoDuplicateExists();
 };
+
+void AutoCoordinatorLogicTests::proxyActiveDependsOnActivationNotGeo()
+{
+    QVERIFY(AutoCoordinatorLogic::isProxyActive(true, false, true));
+    QVERIFY(!AutoCoordinatorLogic::isProxyActive(true, false, false));
+    QVERIFY(!AutoCoordinatorLogic::isProxyActive(true, true, true));
+    QVERIFY(!AutoCoordinatorLogic::isProxyActive(false, false, true));
+    QVERIFY(!AutoCoordinatorLogic::isProxyActive(false, true, false));
+}
 
 void AutoCoordinatorLogicTests::normalizeSubscriptionUrlTrimsAndDropsComments()
 {

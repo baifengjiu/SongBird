@@ -95,6 +95,7 @@ void read(const QJsonObject& root, RootConfigState& config)
     config.dns().dnsHosts = readString(root, QStringLiteral("dnsHosts"));
     config.dns().defaultAllowInsecure = readBool(root, QStringLiteral("defaultAllowInsecure"), true);
     config.ignoreGeoUpdateCore = readBool(root, QStringLiteral("ignoreGeoUpdateCore"), false);
+    config.skipOutboundCheck = readBool(root, QStringLiteral("skipOutboundCheck"), false);
     config.systemProxyAdvancedProtocol = readString(root, QStringLiteral("systemProxyAdvancedProtocol"));
     config.checkPreReleaseUpdate = readBool(root, QStringLiteral("checkPreReleaseUpdate"), false);
 }
@@ -171,6 +172,7 @@ void write(QJsonObject& root, const RootConfigState& config)
     writeIfNotEmpty(root, QStringLiteral("defaultFingerprint"), config.dns().defaultFingerprint);
     writeIfNotEmpty(root, QStringLiteral("defaultUserAgent"), config.dns().defaultUserAgent);
     writeIfNotDefault(root, QStringLiteral("ignoreGeoUpdateCore"), config.ignoreGeoUpdateCore, false);
+    writeIfNotDefault(root, QStringLiteral("skipOutboundCheck"), config.skipOutboundCheck, false);
     writeIfNotEmpty(root, QStringLiteral("systemProxyAdvancedProtocol"), config.systemProxyAdvancedProtocol);
     writeIfNotDefault(root, QStringLiteral("checkPreReleaseUpdate"), config.checkPreReleaseUpdate, false);
 }

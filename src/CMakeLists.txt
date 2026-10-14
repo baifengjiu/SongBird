@@ -9,6 +9,8 @@ set(SONGBIRD_SHARED_SOURCES
     appcore/CoreStartupCheckpoint.h
     appcore/CoreStartupChecklist.h
     appcore/CoreStartupChecklist.cpp
+    appcore/OutboundLivenessProbeService.h
+    appcore/OutboundLivenessProbeService.cpp
     appcore/OutboundLocationProbeService.h
     appcore/OutboundLocationProbeService.cpp
     appcore/BackgroundTaskCoordinator.h

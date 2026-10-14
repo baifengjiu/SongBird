@@ -1099,7 +1099,6 @@ void MainWindow::setupToggleConnections()
 
         ProxyToolbarController::Snapshot snapshot;
         snapshot.uiState = proxyUiState_;
-        snapshot.outboundLocationAvailable = !currentServerLocation_.trimmed().isEmpty();
         snapshot.tunEnabled = tunEnabled_;
         snapshot.existingCoreTypes = existingCoreTypes_;
         snapshot.coreTypeItems = configSnapshot_.coreTypeItems;
@@ -1413,9 +1412,17 @@ void MainWindow::syncStatusBarController()
         return;
     }
 
+    // A reachable session whose exit location never arrived still gets a word rather than a blank.
+    // The location is decoration and its probe is display-only, so its failure must not read as a
+    // broken session -- but an empty field next to a running proxy reads as exactly that.
+    QString statusLocation = currentServerLocation_;
+    if (statusLocation.isEmpty() && proxyUiState_ == ProxyUiState::Active) {
+        statusLocation = tr("Location unknown");
+    }
+
     statusBarController_->refresh(
         currentServerName_,
-        currentServerLocation_,
+        statusLocation,
         currentServerWarning_,
         listenSummary_,
         backgroundTaskRunning_,
@@ -1433,7 +1440,6 @@ void MainWindow::syncProxyToolbarController()
 
     ProxyToolbarController::Snapshot snapshot;
     snapshot.uiState = proxyUiState_;
-    snapshot.outboundLocationAvailable = !currentServerLocation_.trimmed().isEmpty();
     snapshot.tunEnabled = tunEnabled_;
     snapshot.existingCoreTypes = existingCoreTypes_;
     snapshot.coreTypeItems = configSnapshot_.coreTypeItems;

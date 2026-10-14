@@ -12,6 +12,13 @@
 // wiring, this file keeps the decisions.
 namespace AutoCoordinatorLogic {
 
+// Automatic selection can be running before the proxy is ready. Geo is display-only;
+// the icon also requires the confirmed session signal, never just the auto-loop flag.
+inline bool isProxyActive(bool running, bool activationPending, bool outboundReachable)
+{
+    return running && !activationPending && outboundReachable;
+}
+
 // The two strategies auto mode understands. normalizeAutoSelectionStrategy()
 // always returns one of these, so comparing against kAutoStrategyFirstAvailable
 // is safe.

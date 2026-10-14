@@ -27,6 +27,7 @@
 #include "runtime/ICoreProcessHost.h"
 
 class ClientConfigWriter;
+class OutboundLivenessProbeService;
 class OutboundLocationProbeService;
 class QThread;
 class QTimer;
@@ -46,7 +47,10 @@ public:
         ValidateRuntimeResources,
         StartTunRuntime,
         StartCoreProcess,
-        CheckOutboundLocation,
+        // The startup gate. Kept separate from ApplySystemProxy because the outbound check is the
+        // one step that answers "does traffic actually leave this machine", and a failure there has
+        // to be reported before the system proxy is touched.
+        CheckOutboundConnection,
         ApplySystemProxy,
         Proxying,
         Stopping
@@ -56,7 +60,12 @@ public:
         ICoreProcessHost& mainCore;
         ICoreProcessHost& auxiliaryCore;
         ClientConfigWriter& configWriter;
+        // Display only. The location is decoration for the status bar; it decides nothing, and a
+        // failure here must never fail the startup.
         OutboundLocationProbeService& locationProbe;
+        // The gate. A generate_204 host answering through the local proxy is the cheapest evidence
+        // that the outbound works, and it is the only signal startup is allowed to fail on.
+        OutboundLivenessProbeService& livenessProbe;
         BackgroundTaskCoordinator& backgroundTasks;
         IRuntimeProfileResolver& profileResolver;
         IRuntimeEnvironment& environment;
@@ -98,6 +107,17 @@ public:
         AvailabilityCheck check,
         int intervalMs = kDefaultHealthWatchIntervalMs);
 
+    // The unproxied cross-check the gate consults only after it has already failed: true means
+    // "this machine can still reach the probe hosts on its own", which is what makes the failure
+    // the node's fault rather than the local network's. Injected for the same reason
+    // AvailabilityCheck is -- a test cannot stand up the public internet, so without a seam the
+    // fail-open branch would be decided by whatever network the machine running the test happens
+    // to have. Unset means the real probe is used.
+    //
+    // Called on a background thread, so the implementation must not touch this object.
+    using DirectConnectivityCheck = std::function<bool(int timeoutMs)>;
+    void setDirectConnectivityCheck(DirectConnectivityCheck check);
+
     void start(const StartRequest& request);
     void stop(bool immediate = false);
     void restartIfRunning(const StartRequest& request);
@@ -111,6 +131,18 @@ public:
     bool isTransitioning() const;
     QString serverLocation() const;
     QString serverWarning() const;
+    // The short handle this activation's log lines carry. One activation interleaves its own gate,
+    // location and core-output lines with the next one's, and the timestamp is the only thing that
+    // would otherwise tie a core's DNS error to the attempt that provoked it. Empty until the first
+    // activation starts; it keeps its last value across a stop, so a core line that arrives while
+    // the process is still tearing down still names the attempt that produced it.
+    QString activationId() const;
+    // Whether the outbound was confirmed reachable in this activation -- or explicitly waived by the
+    // user's skip-outbound setting, which is the only way this is true without a probe having
+    // answered. This -- not the location string -- is what the UI state uses to decide the proxy is
+    // really up, so a node that answers nothing can never be reported as active just because its geo
+    // lookup happened to succeed.
+    bool outboundReachable() const;
     void setServerWarning(QString warning);
     bool isManagedProxyActive() const;
     void adoptManagedSystemProxy(bool active);
@@ -129,6 +161,10 @@ signals:
     void checklistUpdated(const QStringList& items);
     void checklistCleared();
     void activated(const QString& location);
+    // Announced when the exit location is detected, which now happens after the session is already
+    // up. Kept separate from activated() because the two facts arrive at two different times: a
+    // session that cannot say where it exits is still a working session.
+    void serverLocationChanged(const QString& location);
     void failed(const QString& reason);
     void stopped();
     void coreOutput(const QString& line);
@@ -238,9 +274,13 @@ private:
     void handleCoreStartFailed(const QString& message);
     void handleMainCoreOutput(const QString& line);
 
+    void queryOutboundConnection(const QString& serverIndexId);
+    // True when this machine can reach the probe hosts without going through the core. Runs on a
+    // worker thread, so it reads the injected check and the probe service and nothing else.
+    bool directConnectivityReachable() const;
     void queryServerLocation(
         const QString& serverIndexId);
-    bool applySystemProxyAfterLocation();
+    bool applySystemProxyAfterOutboundCheck();
     void stopInternal(bool immediate, bool clearPostStopAction);
     void handleCoreExited(int exitCode, int status, bool stopRequested, bool auxiliary);
     void scheduleCoreStartAfterStop(bool showStartupOverlay);
@@ -276,10 +316,14 @@ private:
     VmessItem currentServer_;
     QString currentServerLocation_;
     QString currentServerWarning_;
+    // Regenerated only when a fresh activation begins, so the resume paths that re-enter
+    // startInternal mid-activation keep the id their earlier log lines were written under.
+    QString activationId_;
 
     bool coreTunEnabledAtStart_ = false;
     bool coreTunAdapterConflictDetected_ = false;
     bool managedSystemProxyActive_ = false;
+    bool outboundReachable_ = false;
     bool skipTunCleanupOnNextCoreExit_ = false;
     qint64 coreStartTime_ = 0;
 
@@ -289,6 +333,7 @@ private:
     ProxyCrashRestartPolicy crashRestartPolicy_;
     ProxyHealthWatchPolicy healthWatchPolicy_;
     AvailabilityCheck availabilityCheck_;
+    DirectConnectivityCheck directConnectivityCheck_;
     int healthWatchIntervalMs_ = kDefaultHealthWatchIntervalMs;
     bool healthWatchInProgress_ = false;
 

@@ -158,11 +158,11 @@ GitHub 的文档保留期是**超过 7 天未被访问**即删除条目，而 `R
 
 ### 运行时状态机
 
-代理激活由 [ProxySession](src/appcore/ProxySession.h) 的 `Phase` 驱动：`Stopped` → `EnvironmentCleanup` → `ValidateCoreApplication` → `ValidateRuntimeResources` → `ValidateCoreConfig` → `StartTunRuntime` → `StartCoreProcess` → `CheckOutboundLocation` → `ApplySystemProxy` → `Proxying`（或 `Stopping`）。
+代理激活由 [ProxySession](src/appcore/ProxySession.h) 的 `Phase` 驱动：`Stopped` → `EnvironmentCleanup` → `ValidateCoreApplication` → `ValidateRuntimeResources` → `ValidateCoreConfig` → `StartTunRuntime` → `StartCoreProcess` → `CheckOutboundConnection` → `ApplySystemProxy` → `Proxying`（或 `Stopping`）。
 
 关键不变量：
 
-- **Outbound location 是硬启动条件**：`queryServerLocation()` 在无法检测位置时会使启动失败；`computeProxyUiState()`（[RuntimeStateSnapshotBuilder.cpp](src/app/RuntimeStateSnapshotBuilder.cpp)）仅在运行时为 `Proxying`、核心就绪、系统代理已启用且位置非空时才报告 `Active`
+- **出口检测分两层，不能混用**：`OutboundLivenessProbeService` 是门禁——一个 `generate_204` 主机经由本地代理应答即判定 `reachable`，这是启动唯一允许失败的出口信号；`OutboundLocationProbeService` 只作展示——它在会话已进入 `Proxying` 之后才跑，失败只写一行日志和一条状态栏警告。`computeProxyUiState()`（[RuntimeStateSnapshotBuilder.cpp](src/app/RuntimeStateSnapshotBuilder.cpp)）仅在运行时为 `Proxying`、核心就绪、系统代理已启用且出口已确认可达（`ProxySession::outboundReachable()`）时才报告 `Active`。不要为了工具栏好看而放宽，也不要把位置字符串放回判定里
 - **UI 状态流经 RuntimeStateSnapshot**：`AppBootstrap::syncStatusIndicators()` 构建快照 → `RuntimeState::applySnapshot()` 发射 `snapshotApplied` → `MainWindow::applyRuntimeState()` 更新 UI。不要为核心/代理状态新增独立的 MainWindow 布尔值，应扩展快照或 `ProxyUiState`
 - **START/STOP 工具栏状态**由 `ProxyToolbarController` 从 `ProxyUiState` 派生，不要在控制器外直接编辑 `QAction` 状态
 - **代理启动阻塞后台任务**：`BackgroundTaskCoordinator` 使用 `AppBootstrap::isProxyActivationInProgress()` 作为阻塞谓词。新的订阅更新、测速、导入或资源更新必须尊重此协调器

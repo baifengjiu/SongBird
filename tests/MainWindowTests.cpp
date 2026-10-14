@@ -102,6 +102,7 @@ private slots:
     void subscriptionUpdateOverlayCentersTextWithoutActionArea();
     void currentServerStatusUsesNoServerPlaceholderWhenEmpty();
     void currentServerStatusAppendsLocation();
+    void activeSessionWithUnknownLocationSaysSo();
     void currentServerStatusAppendsManualVerificationWarning();
     void statusBarSupportFormatsLabelsAndTransientState();
     void windowTitleSupportFormatsAndElidesRuntimeState();
@@ -2243,6 +2244,33 @@ void MainWindowTests::currentServerStatusAppendsLocation()
     snapshot.currentServerLocation.clear();
     window.applyRuntimeState(snapshot);
     QCOMPARE(currentServerStatusLabel->text(), QStringLiteral("Current: Test Server"));
+}
+
+// The location probe is display-only, so an active session that never learned where it exits must
+// still say something: a blank field next to a running proxy reads as a broken session.
+void MainWindowTests::activeSessionWithUnknownLocationSaysSo()
+{
+    MainWindow window;
+    window.setConfig(Config());
+
+    auto* currentServerStatusLabel =
+        window.findChild<QLabel*>(QStringLiteral("currentServerStatusLabel"));
+    QVERIFY(currentServerStatusLabel != nullptr);
+
+    RuntimeStateSnapshot snapshot;
+    snapshot.currentServerName = QStringLiteral("Test Server");
+    snapshot.proxyUiState = ProxyUiState::Active;
+    window.applyRuntimeState(snapshot);
+    QCOMPARE(
+        currentServerStatusLabel->text(),
+        QStringLiteral("Current: Test Server | Location unknown"));
+
+    // Once the location arrives the placeholder is replaced, not appended to.
+    snapshot.currentServerLocation = QStringLiteral("Japan, Tokyo");
+    window.applyRuntimeState(snapshot);
+    QCOMPARE(
+        currentServerStatusLabel->text(),
+        QStringLiteral("Current: Test Server | Japan, Tokyo"));
 }
 
 void MainWindowTests::currentServerStatusAppendsManualVerificationWarning()

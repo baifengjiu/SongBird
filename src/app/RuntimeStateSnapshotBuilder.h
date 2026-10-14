@@ -23,6 +23,11 @@ public:
         bool proxyTransitioning = false;
         bool coreRunning = false;
         bool coreReady = false;
+        // Whether the outbound was confirmed reachable. This is what decides Active, and it is
+        // deliberately *not* "the location string is non-empty" any more: a geo lookup that failed
+        // while the tunnel works is a missing flag, not a missing connection. The rule itself
+        // lives in appcore/ProxyUiStateDecision.h so it can be tested.
+        bool outboundReachable = false;
     };
 
     struct Callbacks {

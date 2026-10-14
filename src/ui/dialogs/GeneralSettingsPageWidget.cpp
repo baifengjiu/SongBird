@@ -3,6 +3,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
+#include <QLineEdit>
 #include <QSpinBox>
 
 #include "ui/theme/AppTheme.h"
@@ -44,6 +45,8 @@ void GeneralSettingsPageWidget::setConfig(const Config& config)
     localPortSpin_->setValue(config.localPort > 0 ? config.localPort : 10808);
     defaultAllowInsecureCheck_->setChecked(config.dns().defaultAllowInsecure);
     defaultFingerprintCombo_->setCurrentText(config.dns().defaultFingerprint);
+    speedPingTestUrlEdit_->setText(config.defaults().speedPingTestUrl);
+    skipOutboundCheck_->setChecked(config.skipOutboundCheck);
 
     const QString normalizedLanguage = config.ui().languageCode.trimmed();
     const int languageIndex = languageCombo_->findData(normalizedLanguage);
@@ -66,6 +69,8 @@ void GeneralSettingsPageWidget::applyToConfig(Config& config) const
     config.localPort = localPortSpin_->value();
     config.dns().defaultAllowInsecure = defaultAllowInsecureCheck_->isChecked();
     config.dns().defaultFingerprint = defaultFingerprintCombo_->currentText().trimmed();
+    config.defaults().speedPingTestUrl = speedPingTestUrlEdit_->text().trimmed();
+    config.skipOutboundCheck = skipOutboundCheck_->isChecked();
     config.ui().languageCode = languageCombo_->currentData().toString().trimmed();
     config.ui().themeName = AppTheme::normalizeThemeName(themeCombo_->currentData().toString());
 }
@@ -82,6 +87,9 @@ void GeneralSettingsPageWidget::setupUi()
     routeOnlyCheck_ = new QCheckBox(tr("Route only when sniffing"), this);
     routeOnlyCheck_->setObjectName(QStringLiteral("settingsRouteOnlyCheck"));
 
+    skipOutboundCheck_ = new QCheckBox(tr("Skip the outbound check on startup"), this);
+    skipOutboundCheck_->setObjectName(QStringLiteral("settingsSkipOutboundCheck"));
+
     localPortSpin_ = new QSpinBox(this);
     localPortSpin_->setObjectName(QStringLiteral("settingsLocalPortSpin"));
     localPortSpin_->setRange(1, 65535);
@@ -93,6 +101,9 @@ void GeneralSettingsPageWidget::setupUi()
     defaultFingerprintCombo_->setObjectName(QStringLiteral("settingsDefaultFingerprintCombo"));
     defaultFingerprintCombo_->setEditable(true);
     defaultFingerprintCombo_->addItems(defaultFingerprintOptions());
+
+    speedPingTestUrlEdit_ = new QLineEdit(this);
+    speedPingTestUrlEdit_->setObjectName(QStringLiteral("settingsSpeedPingTestUrlEdit"));
 
     languageCombo_ = new QComboBox(this);
     languageCombo_->setObjectName(QStringLiteral("settingsLanguageCombo"));
@@ -111,9 +122,11 @@ void GeneralSettingsPageWidget::setupUi()
         allowLanConnectionCheck_,
         sniffingEnabledCheck_,
         routeOnlyCheck_,
+        skipOutboundCheck_,
         localPortSpin_,
         defaultAllowInsecureCheck_,
         defaultFingerprintCombo_,
+        speedPingTestUrlEdit_,
         languageCombo_,
         themeCombo_});
 
@@ -126,7 +139,9 @@ void GeneralSettingsPageWidget::setupUi()
     generalLayout->setWidget(generalLayout->rowCount(), QFormLayout::SpanningRole, sniffingEnabledCheck_);
     generalLayout->setWidget(generalLayout->rowCount(), QFormLayout::SpanningRole, routeOnlyCheck_);
     generalLayout->setWidget(generalLayout->rowCount(), QFormLayout::SpanningRole, defaultAllowInsecureCheck_);
+    generalLayout->setWidget(generalLayout->rowCount(), QFormLayout::SpanningRole, skipOutboundCheck_);
     generalLayout->addRow(tr("Default Fingerprint"), defaultFingerprintCombo_);
+    generalLayout->addRow(tr("Speed test URL"), speedPingTestUrlEdit_);
 
     connect(sniffingEnabledCheck_, &QCheckBox::toggled, this, [this](bool) {
         updateFieldState();

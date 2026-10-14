@@ -6,6 +6,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QLineEdit;
 class QSpinBox;
 
 class GeneralSettingsPageWidget final : public QWidget
@@ -32,4 +33,9 @@ private:
     QComboBox* defaultFingerprintCombo_ = nullptr;
     QComboBox* languageCombo_ = nullptr;
     QComboBox* themeCombo_ = nullptr;
+    // The endpoint the availability checks probe. Empty keeps the built-in default, so the field is
+    // for a user who needs to point the check at an endpoint their own network does not block.
+    QLineEdit* speedPingTestUrlEdit_ = nullptr;
+    // The advanced escape hatch past the startup outbound gate. See RootConfigState.
+    QCheckBox* skipOutboundCheck_ = nullptr;
 };

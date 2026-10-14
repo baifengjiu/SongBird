@@ -114,6 +114,7 @@ bool SongBirdAutoCoordinator::initialize()
     auxiliaryCore_ = std::make_unique<QtCoreProcessHost>();
     tunCore_ = std::make_unique<QtCoreProcessHost>();
     locationProbe_ = std::make_unique<OutboundLocationProbeService>();
+    livenessProbe_ = std::make_unique<OutboundLivenessProbeService>();
     backgroundTasks_ = std::make_unique<BackgroundTaskCoordinator>();
     systemProxyService_ = std::make_unique<PlatformSystemProxyService>();
 
@@ -165,24 +166,22 @@ bool SongBirdAutoCoordinator::initialize()
         *auxiliaryCore_,
         *clientConfigWriter_,
         *locationProbe_,
+        *livenessProbe_,
         *backgroundTasks_,
         *runtimeResolver_,
         *runtimeEnvironment_,
         *activationCoordinator_});
 
+    QObject::connect(proxySession_.get(), &ProxySession::phaseChanged, this, [this](ProxySession::Phase) {
+        emit proxyActiveChanged(isProxyActive());
+    });
     QObject::connect(proxySession_.get(), &ProxySession::activated, this, [this](const QString& location) {
-        log(QStringLiteral("Proxy active. Location: %1").arg(location));
-        const VmessItem* server = findServerById(activeServerId_);
-        QString country;
-        qint64 latency = -1;
-        for (const AutoNodeEvaluation& evaluation : evaluations_) {
-            if (evaluation.indexId == activeServerId_) {
-                country = evaluation.countryDisplay;
-                latency = evaluation.latencyMs;
-                break;
-            }
-        }
-        emit activeServerChanged(activeServerId_, server == nullptr ? QString() : serverDisplayName(*server), country, location, latency);
+        // The exit location is asked for only after the session is already up, so it is normally not
+        // known yet; serverLocationChanged below publishes it when it arrives.
+        log(location.trimmed().isEmpty()
+            ? QStringLiteral("Proxy active. Exit location not known yet.")
+            : QStringLiteral("Proxy active. Location: %1").arg(location));
+        publishActiveServer(location);
         taskSummary(QString());
         setRunning(true);
         setBusy(false);
@@ -191,6 +190,10 @@ bool SongBirdAutoCoordinator::initialize()
             refreshAfterFailover_ = false;
             maybeRefreshWhenCountryLow();
         }
+    });
+    QObject::connect(proxySession_.get(), &ProxySession::serverLocationChanged, this, [this](const QString& location) {
+        log(QStringLiteral("Proxy exit location: %1").arg(location));
+        publishActiveServer(location);
     });
     QObject::connect(proxySession_.get(), &ProxySession::failed, this, [this](const QString& reason) {
         log(QStringLiteral("Proxy start failed: %1").arg(reason));
@@ -451,6 +454,11 @@ void SongBirdAutoCoordinator::saveSubscriptionUrlsText(const QString& text)
         emit subscriptionUrlsTextChanged(subscriptionUrlsText());
         setStatus(QStringLiteral("Subscription URLs saved"));
     }
+}
+
+bool SongBirdAutoCoordinator::isProxyActive() const
+{
+    return proxySession_ != nullptr && proxySession_->isActive() && proxySession_->outboundReachable();
 }
 
 void SongBirdAutoCoordinator::start()
@@ -2052,6 +2060,21 @@ void SongBirdAutoCoordinator::setBusy(bool busy)
             continueStartWithCurrentData(false, false, true);
         });
     }
+}
+
+void SongBirdAutoCoordinator::publishActiveServer(const QString& location)
+{
+    const VmessItem* server = findServerById(activeServerId_);
+    QString country;
+    qint64 latency = -1;
+    for (const AutoNodeEvaluation& evaluation : evaluations_) {
+        if (evaluation.indexId == activeServerId_) {
+            country = evaluation.countryDisplay;
+            latency = evaluation.latencyMs;
+            break;
+        }
+    }
+    emit activeServerChanged(activeServerId_, server == nullptr ? QString() : serverDisplayName(*server), country, location, latency);
 }
 
 void SongBirdAutoCoordinator::setRunning(bool running)

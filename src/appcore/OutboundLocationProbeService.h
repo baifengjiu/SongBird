@@ -31,14 +31,19 @@ public:
     static constexpr int LocationProbePortOffset = 103;
     static constexpr int LocationProbeTimeoutMs = 5000;
     static constexpr int LocationProbeRetryDelayMs = 300;
-    static constexpr int LocationProbeTotalTimeoutMs = 12000;
-    static constexpr int LocationProbeMaxRounds = 8;
+    // This probe is display-only now -- it runs after the system proxy is already applied and a
+    // failure only costs the user the flag next to the node name. It used to be the startup gate,
+    // which is why it retried eight times; against the same handful of rate-limiting geo services
+    // that was up to forty requests per launch for a decoration. Two rounds is enough to ride out a
+    // single transient failure, and the total budget is cut to match.
+    static constexpr int LocationProbeTotalTimeoutMs = 8000;
+    static constexpr int LocationProbeMaxRounds = 2;
 
     static int resolveHttpPort(const Config& config, bool usesDedicatedProbe);
 
     OutboundLocationProbeResult probe(int httpPort) const;
     OutboundLocationDetails probeStructured(int httpPort) const;
-    // The same probe with a shortened budget. The production constants add up to twelve seconds
+    // The same probe with a shortened budget. The production constants add up to eight seconds
     // of waiting before the timeout branch is reached, so it cannot be asserted without a seam.
     OutboundLocationDetails probeStructured(int httpPort, const LocationProbeTimings& timings) const;
 

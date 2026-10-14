@@ -19,6 +19,7 @@
 #include "app/DefaultServerSwitchCoordinator.h"
 #include "app/GeoResourceUpdateCoordinator.h"
 #include "appcore/IUserFeedback.h"
+#include "appcore/OutboundLivenessProbeService.h"
 #include "appcore/OutboundLocationProbeService.h"
 #include "appcore/ProxyRuntimeInterfaces.h"
 #include "appcore/ProxySession.h"
@@ -131,8 +132,8 @@ QString proxySessionPhaseName(ProxySession::Phase phase)
         return QStringLiteral("StartTunRuntime");
     case ProxySession::Phase::StartCoreProcess:
         return QStringLiteral("StartCoreProcess");
-    case ProxySession::Phase::CheckOutboundLocation:
-        return QStringLiteral("CheckOutboundLocation");
+    case ProxySession::Phase::CheckOutboundConnection:
+        return QStringLiteral("CheckOutboundConnection");
     case ProxySession::Phase::ApplySystemProxy:
         return QStringLiteral("ApplySystemProxy");
     case ProxySession::Phase::Proxying:
@@ -419,6 +420,7 @@ void AppBootstrap::syncStatusIndicators()
         inputs.proxyTransitioning = objects_->proxySession != nullptr && objects_->proxySession->isTransitioning();
         inputs.coreRunning = isCoreRunning();
         inputs.coreReady = isCoreReady();
+        inputs.outboundReachable = objects_->proxySession != nullptr && objects_->proxySession->outboundReachable();
         const RuntimeStateSnapshot snapshot = objects_->runtimeStateSnapshotBuilder->buildSnapshot(inputs);
         objects_->runtimeState->applySnapshot(snapshot);
     }

@@ -22,6 +22,7 @@ class IRuntimeEnvironment;
 class IUserFeedback;
 class JsonConfigRepository;
 class MainWindow;
+class OutboundLivenessProbeService;
 class OutboundLocationProbeService;
 class ProxySession;
 class QtCoreProcessHost;
@@ -72,6 +73,7 @@ struct AppBootstrapObjects {
     std::unique_ptr<CoreProcessCleanupService> coreProcessCleanupService;
     std::unique_ptr<CoreDiscoveryService> coreDiscoveryService;
     std::unique_ptr<OutboundLocationProbeService> outboundLocationProbeService;
+    std::unique_ptr<OutboundLivenessProbeService> outboundLivenessProbeService;
     std::unique_ptr<TunRuntimeService> tunRuntimeService;
     std::unique_ptr<RuntimeState> runtimeState;
     std::unique_ptr<QtCoreProcessHost> auxiliaryCoreProcessHost;

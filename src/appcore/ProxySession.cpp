@@ -14,12 +14,15 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QJsonValue>
+#include <QRandomGenerator>
 #include <QSet>
 #include <QTcpSocket>
 #include <QThread>
 #include <QTimer>
 
+#include "appcore/OutboundLivenessProbeService.h"
 #include "appcore/OutboundLocationProbeService.h"
+#include "common/ServerDisplayName.h"
 #include "appcore/TunSettingsApplyDecision.h"
 #include "appcore/TunRuntimeState.h"
 #include "common/AppPaths.h"
@@ -37,6 +40,49 @@
 namespace {
 
 constexpr int CoreStartupCompletionOverlayDelayMs = 2000;
+
+// The correlation handle as a log field. "-" rather than an empty value so the field is always
+// present and a grep for "id=" does not silently skip the lines written before the first activation.
+QString activationTag(const QString& activationId)
+{
+    return QStringLiteral("id=%1").arg(activationId.isEmpty() ? QStringLiteral("-") : activationId);
+}
+
+// The machine half of a gate log line: key=value, so the line stays greppable and its fields can be
+// read without a parser. Assembled from parts rather than written as one template, because a single
+// template reading "id=%1 port=%2 ..." is a prose literal that the localization scan would report.
+QString outboundGateFacts(const QString& activationId, int port, int hosts, qint64 elapsedMs)
+{
+    QStringList parts;
+    parts << activationTag(activationId);
+    // A field the caller has no value for is left out rather than written as a zero, so a skipped
+    // check does not read as one that tried nothing in no time.
+    if (port > 0) {
+        parts << QStringLiteral("port=%1").arg(port);
+    }
+    if (hosts > 0) {
+        parts << QStringLiteral("hosts=%1").arg(hosts);
+    }
+    if (elapsedMs >= 0) {
+        parts << QStringLiteral("elapsed=%1ms").arg(elapsedMs);
+    }
+    return parts.join(QStringLiteral(" "));
+}
+
+// The DNS the core was actually started with. A "the gate failed because of DNS" report cannot be
+// argued either way without this line: the config path the Activating line already carries says
+// nothing about which resolvers ended up in effect, and the core's own resolver errors are the only
+// other place they appear -- interleaved with everything else it logs.
+QString describeEffectiveDns(const DnsConfigState& dns)
+{
+    QStringList parts;
+    parts << QStringLiteral("directDns=%1").arg(dns.directDns);
+    parts << QStringLiteral("remoteDns=%1").arg(dns.remoteDns);
+    parts << QStringLiteral("proxyServerDns=%1").arg(
+        dns.proxyServerDns.trimmed().isEmpty() ? QStringLiteral("(unset)") : dns.proxyServerDns);
+    parts << QStringLiteral("fakeIp=%1").arg(dns.fakeIp ? QStringLiteral("on") : QStringLiteral("off"));
+    return parts.join(QStringLiteral(" "));
+}
 
 QStringList missingSingBoxRuleSetTagsFor(const QString& configPath)
 {
@@ -176,6 +222,20 @@ void ProxySession::setAvailabilityCheck(AvailabilityCheck check, int intervalMs)
     healthWatchIntervalMs_ = intervalMs > 0 ? intervalMs : kDefaultHealthWatchIntervalMs;
 }
 
+void ProxySession::setDirectConnectivityCheck(DirectConnectivityCheck check)
+{
+    directConnectivityCheck_ = std::move(check);
+}
+
+bool ProxySession::directConnectivityReachable() const
+{
+    const int timeoutMs = OutboundLivenessProbeService::LivenessProbeDirectTimeoutMs;
+    if (directConnectivityCheck_) {
+        return directConnectivityCheck_(timeoutMs);
+    }
+    return deps_.livenessProbe.probeDirect(timeoutMs).reachable;
+}
+
 void ProxySession::start(const StartRequest& request)
 {
     currentRequest_ = request;
@@ -256,6 +316,16 @@ QString ProxySession::serverLocation() const
 QString ProxySession::serverWarning() const
 {
     return currentServerWarning_;
+}
+
+QString ProxySession::activationId() const
+{
+    return activationId_;
+}
+
+bool ProxySession::outboundReachable() const
+{
+    return outboundReachable_;
 }
 
 bool ProxySession::isManagedProxyActive() const
@@ -363,6 +433,16 @@ void ProxySession::startInternal(
         failStartup(writeResult);
         return;
     }
+
+    const QStringList activationContext{
+        QStringLiteral("id=%1").arg(activationId_),
+        QStringLiteral("core=%1 (%2)").arg(coreTypeDisplayName(launchCore), QDir::toNativeSeparators(coreInfo.program)),
+        QStringLiteral("config=%1").arg(QDir::toNativeSeparators(coreConfigPath)),
+        QStringLiteral("tun=%1").arg(currentRequest_.config.tun().tunModeItem.enableTun
+            ? QStringLiteral("on") : QStringLiteral("off")),
+        QStringLiteral("routing=%1").arg(currentRequest_.config.collection().routingModeId)};
+    emit logMessage(tr("Activating %1 | %2")
+        .arg(serverDisplayName(server), activationContext.join(QStringLiteral(" | "))));
 
     setPhase(Phase::ValidateRuntimeResources);
     if (launchCore == CoreType::SingBox) {
@@ -553,6 +633,7 @@ void ProxySession::beginStartupAttempt(const StartupContext& context)
         crashRestartPolicy_.resetTunConflictRetries();
     }
     cancelPendingCoreRestarts();
+    outboundReachable_ = false;
     clearServerLocation();
     deps_.environment.cleanupPortProcesses();
 }
@@ -686,6 +767,11 @@ void ProxySession::beginActivation()
     const bool alreadyActivating = isActivationInProgress();
     if (!alreadyActivating) {
         deps_.activationCoordinator.cancelBackgroundTasksForStartup();
+        // A fresh activation, so a fresh handle. The resume paths re-enter startInternal with the
+        // phase still inside the startup range, which is exactly the case that must keep the id its
+        // earlier lines were already written under.
+        activationId_ = QStringLiteral("%1").arg(
+            QRandomGenerator::global()->generate(), 8, 16, QLatin1Char('0'));
     }
     setPhase(Phase::EnvironmentCleanup);
 }
@@ -1056,12 +1142,11 @@ void ProxySession::handleStartupDownloadFinished(
 
 void ProxySession::handleCoreStarted(const QString& serverIndexId)
 {
-    setServerWarning({});
-    if (phase_ == Phase::Stopping) {
+    if (phase_ != Phase::StartCoreProcess || !deps_.mainCore.isRunning()) {
         return;
     }
-    setPhase(Phase::CheckOutboundLocation);
-    queryServerLocation(serverIndexId);
+    setServerWarning({});
+    queryOutboundConnection(serverIndexId);
 }
 
 void ProxySession::validateCoreListeningAndHandleStarted(
@@ -1151,71 +1236,203 @@ void ProxySession::handleCoreStartFailed(const QString& message)
     clearServerLocation();
 }
 
-// --- Location probe ---
+// --- Tier 1: outbound startup gate ---
 
-void ProxySession::queryServerLocation(const QString& serverIndexId)
+void ProxySession::queryOutboundConnection(const QString& serverIndexId)
 {
-    setPhase(Phase::CheckOutboundLocation);
-    const QString locationStep = tr("Check outbound location");
+    setPhase(Phase::CheckOutboundConnection);
+    const QString connectionStep = tr("Check outbound connection");
     if (!deps_.mainCore.isRunning() || serverIndexId.trimmed().isEmpty()) {
-        const QString message = QCoreApplication::translate("ProxySession", "Core is not ready for outbound location detection.");
-        setCheckpointStatus(CoreStartupCheckpointStatus::Failed, locationStep, message);
+        const QString message = tr("Core is not ready for the outbound connection check.");
+        setCheckpointStatus(CoreStartupCheckpointStatus::Failed, connectionStep, message);
         failStartup(OperationResult::fail(message));
         return;
     }
 
-    clearServerLocation();
-    setCheckpointStatus(CoreStartupCheckpointStatus::Started, locationStep,
-        QCoreApplication::translate("ProxySession", "Detecting outbound IP location."));
+    // The explicit advanced escape hatch. Off by default: the gate is what keeps a node that
+    // answers nothing from being reported as active, so skipping it is a trade the user opts into.
+    // Everything after the gate is unchanged -- the system proxy is applied and the display-only
+    // location probe still runs.
+    if (currentRequest_.config.skipOutboundCheck) {
+        const QString activeServerId = serverIndexId.trimmed();
+        setCheckpointStatus(CoreStartupCheckpointStatus::Skipped, connectionStep,
+            tr("Outbound connection check was skipped."));
+        // Logged as loudly as a verdict would be. "The user turned the check off" is the first
+        // thing a report has to be read against, and without this line the gate looks like it
+        // simply never ran.
+        emit logMessage(tr("Outbound check skipped") + QStringLiteral(" | ")
+            + outboundGateFacts(activationId_, 0, 0, -1));
+        // Waived, not confirmed: the UI state asks whether the session may be reported active, and
+        // the user has just said the check is not wanted.
+        outboundReachable_ = true;
+        if (applySystemProxyAfterOutboundCheck()) {
+            clearChecklistAfterStableRun(CoreStartupCompletionOverlayDelayMs);
+            queryServerLocation(activeServerId);
+        }
+        return;
+    }
 
     const bool usesDedicatedProbe = currentServer_.configType != ConfigType::Custom;
     const int httpPort = OutboundLocationProbeService::resolveHttpPort(currentRequest_.config, usesDedicatedProbe);
     if (httpPort <= 0 || httpPort > 65535) {
-        const QString message = QCoreApplication::translate("ProxySession", "Location probe port is unavailable.");
-        setCheckpointStatus(CoreStartupCheckpointStatus::Failed, locationStep, message);
+        const QString message = tr("Outbound connection check port is unavailable.");
+        setCheckpointStatus(CoreStartupCheckpointStatus::Failed, connectionStep, message);
         failStartup(OperationResult::fail(message));
         return;
     }
+    setCheckpointStatus(CoreStartupCheckpointStatus::Started, connectionStep,
+        tr("Checking the outbound connection."));
 
     const std::weak_ptr<char> guard = lifetimeGuard_;
     const QString activeServerId = serverIndexId.trimmed();
     const qint64 startTime = coreStartTime_;
-    QThread* thread = launchBackgroundThread([this, guard, activeServerId, httpPort, locationStep, startTime]() {
-        const OutboundLocationProbeResult probeResult = deps_.locationProbe.probe(httpPort);
-        const QString location = probeResult.location;
+    QThread* thread = launchBackgroundThread([this, guard, activeServerId, httpPort, connectionStep, startTime]() {
+        const OutboundLivenessResult probeResult = deps_.livenessProbe.probe(httpPort);
+        const bool reachable = probeResult.reachable;
         const QString lastError = probeResult.error;
+        const OutboundFailureShape failureShape = probeResult.shape;
+        const int attemptedHosts = probeResult.attemptedHosts;
+        const qint64 elapsedMs = probeResult.elapsedMs;
+        // Only on the failure path, and unproxied on purpose: asking the same question through the
+        // core would answer nothing new, and the only thing worth knowing once the gate says "no"
+        // is whether this machine can get anywhere without it.
+        const bool directReachable = reachable ? true : directConnectivityReachable();
+        QMetaObject::invokeMethod(this, [this, guard, activeServerId, httpPort, reachable, lastError, failureShape,
+                                         attemptedHosts, elapsedMs, directReachable, connectionStep, startTime]() {
+            if (guard.expired() || shuttingDown_.load() || phase_ != Phase::CheckOutboundConnection) {
+                return;
+            }
+            if (coreStartTime_ != startTime) {
+                return; // Never overwrite the checklist belonging to a newer activation.
+            }
+            if (!deps_.mainCore.isRunning() || deps_.profileResolver.currentIndexId() != activeServerId) {
+                setCheckpointStatus(CoreStartupCheckpointStatus::Skipped, connectionStep,
+                    tr("Outbound connection check result is stale."));
+                stop(false);
+                return;
+            }
+            if (!reachable) {
+                emit logMessage(tr("Outbound check failed") + QStringLiteral(" | ")
+                    + outboundGateFacts(activationId_, httpPort, attemptedHosts, elapsedMs));
+                // The one piece of evidence a DNS explanation cannot be argued without, printed
+                // next to the failure it is meant to explain rather than left to be reconstructed
+                // from the config file.
+                emit logMessage(tr("DNS in effect") + QStringLiteral(" | ")
+                    + describeEffectiveDns(currentRequest_.config.dns()));
 
-        QMetaObject::invokeMethod(this, [this, guard, activeServerId, location, lastError, locationStep, startTime]() {
-            if (guard.expired()) {
-                return;
-            }
-            if (!deps_.mainCore.isRunning()
-                || coreStartTime_ != startTime
-                || deps_.profileResolver.currentIndexId() != activeServerId) {
-                setCheckpointStatus(CoreStartupCheckpointStatus::Failed, locationStep,
-                    QCoreApplication::translate("ProxySession", "Outbound location detection result is stale."));
-                cancelActivation();
-                return;
-            }
-            setServerLocation(location);
-            if (currentServerLocation_.isEmpty()) {
-                const QString message = lastError.trimmed().isEmpty()
-                    ? QCoreApplication::translate("ProxySession", "Outbound location unavailable.")
-                    : lastError;
-                setCheckpointStatus(CoreStartupCheckpointStatus::Failed, locationStep, message);
+                if (!directReachable) {
+                    // Both halves failed, so the fault is not the node: this machine cannot reach
+                    // the probe hosts even with the core out of the picture. Failing closed here
+                    // would take away a proxy the user may need precisely *because* the local
+                    // network is in trouble, so the check is waived and the session comes up --
+                    // with a warning that outlives the checklist in the status bar.
+                    emit logMessage(tr("Outbound check waived: direct connectivity failed as well")
+                        + QStringLiteral(" | ")
+                        + outboundGateFacts(activationId_, httpPort, attemptedHosts, elapsedMs));
+                    const QString warning = tr(
+                        "The outbound check could not be completed: this machine cannot reach the probe hosts directly either.");
+                    outboundReachable_ = true;
+                    setCheckpointStatus(CoreStartupCheckpointStatus::Passed, connectionStep, warning);
+                    if (applySystemProxyAfterOutboundCheck()) {
+                        // Set after the phase change, never before: setPhase(Proxying) clears the
+                        // warning, because one left over from a previous core must not describe the
+                        // core now running. Setting it first is how this line was lost.
+                        setServerWarning(warning);
+                        clearChecklistAfterStableRun(CoreStartupCompletionOverlayDelayMs);
+                        queryServerLocation(activeServerId);
+                    }
+                    return;
+                }
+
+                QString message = lastError.trimmed().isEmpty()
+                    ? tr("Outbound connection unavailable.") : lastError;
+                // Say what the failure *was*, not just that there was one. The same list of hosts
+                // reads as three very different problems depending on its shape, and the user is
+                // the one who has to act on it.
+                switch (failureShape) {
+                case OutboundFailureShape::CertificateMismatch:
+                    message = tr("%1 The server certificate does not match the address.").arg(message);
+                    break;
+                case OutboundFailureShape::Unreachable:
+                    message = tr("%1 The node could not be reached.").arg(message);
+                    break;
+                case OutboundFailureShape::TunnelBroken:
+                    message = tr("%1 The tunnel was established but carries no traffic.").arg(message);
+                    break;
+                case OutboundFailureShape::Unknown:
+                    break;
+                }
+                setCheckpointStatus(CoreStartupCheckpointStatus::Failed, connectionStep, message);
                 failStartup(OperationResult::fail(message));
                 return;
             }
-            setCheckpointStatus(CoreStartupCheckpointStatus::Passed, locationStep, currentServerLocation_);
-            if (applySystemProxyAfterLocation()) {
+            outboundReachable_ = true;
+            setCheckpointStatus(CoreStartupCheckpointStatus::Passed, connectionStep,
+                tr("Outbound connection is reachable."));
+            emit logMessage(tr("Outbound check passed") + QStringLiteral(" | ")
+                + outboundGateFacts(activationId_, httpPort, attemptedHosts, elapsedMs));
+            if (applySystemProxyAfterOutboundCheck()) {
                 clearChecklistAfterStableRun(CoreStartupCompletionOverlayDelayMs);
+                queryServerLocation(activeServerId);
             }
         }, Qt::QueuedConnection);
     }, [this](QThread* worker) { trackBackgroundThread(worker); });
     thread->start();
 }
 
-bool ProxySession::applySystemProxyAfterLocation()
+// --- Tier 2: optional exit-location display ---
+
+void ProxySession::queryServerLocation(const QString& serverIndexId)
+{
+    if (phase_ != Phase::Proxying || !deps_.mainCore.isRunning() || serverIndexId.trimmed().isEmpty()) {
+        return;
+    }
+    const bool usesDedicatedProbe = currentServer_.configType != ConfigType::Custom;
+    const int httpPort = OutboundLocationProbeService::resolveHttpPort(currentRequest_.config, usesDedicatedProbe);
+    if (httpPort <= 0 || httpPort > 65535) {
+        const QString message = tr("Location probe port is unavailable.");
+        if (currentServerWarning_.isEmpty()) {
+            setServerWarning(message);
+        }
+        emit logMessage(message);
+        return;
+    }
+    emit logMessage(tr("Detecting outbound IP location") + QStringLiteral(" | ")
+        + activationTag(activationId_));
+    const std::weak_ptr<char> guard = lifetimeGuard_;
+    const QString activeServerId = serverIndexId.trimmed();
+    const qint64 startTime = coreStartTime_;
+    QThread* thread = launchBackgroundThread([this, guard, activeServerId, httpPort, startTime]() {
+        const OutboundLocationProbeResult probeResult = deps_.locationProbe.probe(httpPort);
+        const QString location = probeResult.location;
+        const QString lastError = probeResult.error;
+        QMetaObject::invokeMethod(this, [this, guard, activeServerId, location, lastError, startTime]() {
+            if (guard.expired() || shuttingDown_.load() || phase_ != Phase::Proxying
+                || !deps_.mainCore.isRunning() || coreStartTime_ != startTime
+                || deps_.profileResolver.currentIndexId() != activeServerId) {
+                return; // A display result is never allowed to cancel an activation.
+            }
+            setServerLocation(location);
+            // The location signal may synchronously stop or switch the session.
+            if (phase_ != Phase::Proxying || coreStartTime_ != startTime
+                || deps_.profileResolver.currentIndexId() != activeServerId) {
+                return;
+            }
+            if (currentServerLocation_.isEmpty()) {
+                const QString message = lastError.trimmed().isEmpty()
+                    ? tr("Outbound location unavailable.") : lastError;
+                // A location warning must not replace a stronger health-watch warning.
+                if (currentServerWarning_.isEmpty()) {
+                    setServerWarning(message);
+                }
+                emit logMessage(message + QStringLiteral(" | ") + activationTag(activationId_));
+            }
+        }, Qt::QueuedConnection);
+    }, [this](QThread* worker) { trackBackgroundThread(worker); });
+    thread->start();
+}
+
+bool ProxySession::applySystemProxyAfterOutboundCheck()
 {
     const QString proxyStep = tr("Apply system proxy");
     const SystemProxyMode configuredMode = normalizeSystemProxyMode(currentRequest_.config.sysProxyType);
@@ -1437,6 +1654,7 @@ void ProxySession::scheduleCoreStartAfterStop(bool showStartupOverlay)
 
 void ProxySession::clearAppliedProxyAfterStopped()
 {
+    outboundReachable_ = false;
     const bool systemProxyEnabled = deps_.activationCoordinator.isSystemProxyEnabled();
     if (!shouldClearManagedSystemProxy(managedSystemProxyActive_, systemProxyEnabled)) {
         return;
@@ -1453,6 +1671,7 @@ void ProxySession::clearAppliedProxyAfterStopped()
 
 void ProxySession::clearProxyStateAfterStopped()
 {
+    outboundReachable_ = false;
     managedSystemProxyActive_ = false;
     currentServer_ = {};
     currentServerLocation_.clear();
@@ -1661,6 +1880,7 @@ void ProxySession::setServerLocation(QString location)
         return;
     }
     currentServerLocation_ = std::move(location);
+    emit serverLocationChanged(currentServerLocation_);
     emit statusSyncRequested();
 }
 

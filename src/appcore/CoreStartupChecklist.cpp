@@ -73,7 +73,7 @@ void CoreStartupChecklist::prepare(bool tunEnabled, bool showOverlay)
     }
     steps_
         << proxySessionText("Start core process")
-        << proxySessionText("Check outbound location")
+        << proxySessionText("Check outbound connection")
         << proxySessionText("Apply system proxy");
     stepStatus_.clear();
     stepDetails_.clear();

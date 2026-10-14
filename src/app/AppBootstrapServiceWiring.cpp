@@ -16,6 +16,7 @@
 #include "appcore/CoreDiscoveryService.h"
 #include "appcore/CoreProcessCleanupService.h"
 #include "appcore/FunctionRuntimeAdapters.h"
+#include "appcore/OutboundLivenessProbeService.h"
 #include "appcore/OutboundLocationProbeService.h"
 #include "appcore/ProxyRuntimeInterfaces.h"
 #include "appcore/ProxySession.h"
@@ -83,6 +84,7 @@ void AppBootstrap::wireCoreServices()
     };
     objects_->runtimeStateSnapshotBuilder = std::make_unique<RuntimeStateSnapshotBuilder>(std::move(runtimeStatusCallbacks));
     objects_->outboundLocationProbeService = std::make_unique<OutboundLocationProbeService>();
+    objects_->outboundLivenessProbeService = std::make_unique<OutboundLivenessProbeService>();
     objects_->appUpdateInstallService = std::make_unique<AppUpdateInstallService>(
         [](const QString& program, const QStringList& arguments) {
             return restartProcessAsAdministrator(program, arguments);

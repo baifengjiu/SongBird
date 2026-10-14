@@ -13,7 +13,6 @@ class ProxyToolbarController final {
 public:
     struct Snapshot {
         ProxyUiState uiState = ProxyUiState::Idle;
-        bool outboundLocationAvailable = false;
         bool tunEnabled = false;
         QList<CoreType> existingCoreTypes;
         QList<CoreTypeItem> coreTypeItems;

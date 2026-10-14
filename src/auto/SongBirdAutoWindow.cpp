@@ -31,6 +31,7 @@
 #include <limits>
 
 #include "auto/AutoCountrySelection.h"
+#include "auto/AutoCoordinatorLogic.h"
 #include "auto/SongBirdAutoCoordinator.h"
 #include "appcore/StartupAdminElevation.h"
 #include "common/AppPlatform.h"
@@ -352,6 +353,15 @@ void SongBirdAutoWindow::connectSignals()
     connect(&coordinator_, &SongBirdAutoCoordinator::taskSummaryMessage, this, &SongBirdAutoWindow::appendTaskSummary);
     connect(&coordinator_, &SongBirdAutoCoordinator::busyChanged, this, &SongBirdAutoWindow::setBusy);
     connect(&coordinator_, &SongBirdAutoCoordinator::runningChanged, this, &SongBirdAutoWindow::setRunning);
+    connect(&coordinator_, &SongBirdAutoCoordinator::proxyActiveChanged, this, [this](bool active) {
+        if (active) {
+            activationInProgress_ = false;
+        }
+        updateRunButtonState();
+        updateTunButtonState();
+        updateTrayMenu();
+        updateAppIcon();
+    });
     connect(&coordinator_, &SongBirdAutoCoordinator::activeServerChanged, this, &SongBirdAutoWindow::setActiveServer);
     connect(&coordinator_, &SongBirdAutoCoordinator::statusMessageChanged, this, [this](const QString& message) {
         statusBar()->showMessage(message);
@@ -1123,7 +1133,7 @@ bool SongBirdAutoWindow::isActivationPending() const
 
 bool SongBirdAutoWindow::isProxyActive() const
 {
-    return running_ && !isActivationPending() && !currentLocation_.isEmpty();
+    return AutoCoordinatorLogic::isProxyActive(running_, isActivationPending(), coordinator_.isProxyActive());
 }
 
 void SongBirdAutoWindow::updateAppIcon()
@@ -1163,6 +1173,8 @@ void SongBirdAutoWindow::setBusy(bool busy)
 void SongBirdAutoWindow::setRunning(bool running)
 {
     running_ = running;
+    // running also covers node selection. Only proxyActiveChanged confirms activation;
+    // turning the automatic loop off still cancels the pending UI state immediately.
     if (!running_) {
         activationInProgress_ = false;
     }
@@ -1183,9 +1195,6 @@ void SongBirdAutoWindow::setActiveServer(
     currentCountryDisplay_ = countryDisplay.trimmed();
     currentLocation_ = location.trimmed();
     currentLatencyMs_ = latencyMs;
-    if (running_ && !currentLocation_.isEmpty()) {
-        activationInProgress_ = false;
-    }
     updateLogStatusText();
     updateTrayToolTip();
     updateAppIcon();

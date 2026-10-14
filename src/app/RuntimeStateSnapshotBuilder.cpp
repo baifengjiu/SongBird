@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 
 #include "domain/models/RoutingProfiles.h"
+#include "appcore/ProxyUiStateDecision.h"
 
 RuntimeStateSnapshotBuilder::RuntimeStateSnapshotBuilder(Callbacks callbacks)
     : callbacks_(std::move(callbacks))
@@ -60,18 +61,12 @@ QString RuntimeStateSnapshotBuilder::buildListenSummaryText(const Config& config
 
 ProxyUiState RuntimeStateSnapshotBuilder::computeProxyUiState(const Inputs& inputs) const
 {
-    if (inputs.proxyTransitioning) {
-        return ProxyUiState::Transitioning;
-    }
-
-    const bool locationAvailable = !inputs.currentServerLocation.trimmed().isEmpty();
-    if (inputs.coreReady && inputs.systemProxyApplied && locationAvailable) {
-        return ProxyUiState::Active;
-    }
-    if (!inputs.coreReady && !inputs.coreRunning) {
-        return ProxyUiState::Idle;
-    }
-    return ProxyUiState::Inconsistent;
+    return decideProxyUiState(
+        inputs.proxyTransitioning,
+        inputs.coreReady,
+        inputs.coreRunning,
+        inputs.systemProxyApplied,
+        inputs.outboundReachable);
 }
 
 void RuntimeStateSnapshotBuilder::logProxySyncDiagnostic(const Inputs& inputs, const RuntimeStateSnapshot& snapshot)
@@ -107,11 +102,12 @@ void RuntimeStateSnapshotBuilder::logProxySyncDiagnostic(const Inputs& inputs, c
 
     const QString diagnostic = QStringLiteral(
         "Proxy UI state inconsistent: phase=%1 coreProcessRunning=%2 coreReady=%3 "
-        "systemProxyApplied=%4 currentServerLocation=\"%5\" systemProxyMode=%6")
+        "systemProxyApplied=%4 outboundReachable=%5 currentServerLocation=\"%6\" systemProxyMode=%7")
         .arg(inputs.proxyPhaseName)
         .arg(inputs.coreRunning ? QStringLiteral("true") : QStringLiteral("false"))
         .arg(inputs.coreReady ? QStringLiteral("true") : QStringLiteral("false"))
         .arg(snapshot.systemProxyApplied ? QStringLiteral("true") : QStringLiteral("false"))
+        .arg(inputs.outboundReachable ? QStringLiteral("true") : QStringLiteral("false"))
         .arg(snapshot.currentServerLocation.trimmed())
         .arg(systemProxyModeDisplayName(snapshot.systemProxyMode));
 

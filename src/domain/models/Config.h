@@ -110,6 +110,11 @@ struct RootConfigState {
     std::optional<bool> mux4SboxPadding;
     int sysProxyType = 0;
     bool ignoreGeoUpdateCore = false;
+    // Advanced escape hatch: skip the startup outbound gate entirely and apply the system proxy
+    // without probing. Off by default -- the gate is what stops a dead node from being reported as
+    // active -- but a user who already knows their node works, or whose network blocks every
+    // generate_204 host, needs a way past a false negative.
+    bool skipOutboundCheck = false;
     QString systemProxyAdvancedProtocol;
     bool checkPreReleaseUpdate = false;
 };

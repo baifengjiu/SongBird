@@ -16,6 +16,7 @@
 #include "appcore/CoreProcessCleanupService.h"
 #include "appcore/CoreDiscoveryService.h"
 #include "appcore/FunctionRuntimeAdapters.h"
+#include "appcore/OutboundLivenessProbeService.h"
 #include "appcore/OutboundLocationProbeService.h"
 #include "appcore/ProxySession.h"
 #include "appcore/TunRuntimeService.h"
@@ -59,6 +60,7 @@ public slots:
         const QList<RoutingRule>& routingCustomRules,
         const QString& settingsRoutingRuleTabKey);
     void saveSubscriptionUrlsText(const QString& text);
+    bool isProxyActive() const;
     void start();
     void stop();
     void updateSubscriptionsAndRetest();
@@ -70,6 +72,7 @@ signals:
     void nodeEvaluationsChanged(const QList<AutoNodeEvaluation>& evaluations);
     void selectedCountryChanged(const QString& countryCode);
     void runningChanged(bool running);
+    void proxyActiveChanged(bool active);
     void busyChanged(bool busy);
     void activeServerChanged(const QString& serverId, const QString& serverName, const QString& countryDisplay, const QString& location, qint64 latencyMs);
     void statusMessageChanged(const QString& message);
@@ -154,6 +157,9 @@ private:
     void finishStopped();
     void setBusy(bool busy);
     void setRunning(bool running);
+    // Re-announces the active server. Split out because the presentation is refreshed from two
+    // places now: activation, and the exit location arriving later.
+    void publishActiveServer(const QString& location);
     void setStatus(const QString& status);
     void log(const QString& message);
     void taskSummary(const QString& message);
@@ -178,6 +184,7 @@ private:
     std::unique_ptr<QtCoreProcessHost> auxiliaryCore_;
     std::unique_ptr<QtCoreProcessHost> tunCore_;
     std::unique_ptr<OutboundLocationProbeService> locationProbe_;
+    std::unique_ptr<OutboundLivenessProbeService> livenessProbe_;
     std::unique_ptr<BackgroundTaskCoordinator> backgroundTasks_;
     std::unique_ptr<FunctionRuntimeEnvironment> runtimeEnvironment_;
     std::unique_ptr<FunctionProxyActivationCoordinator> activationCoordinator_;
