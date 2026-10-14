@@ -300,6 +300,19 @@ void JsonConfigRepositoryTests::loadMissingFileBuildsDefaultSongBirdConfig()
     QCOMPARE(config.dns().directDns, QStringLiteral("https://dns.alidns.com/dns-query"));
     QCOMPARE(config.dns().remoteDns, QStringLiteral("https://cloudflare-dns.com/dns-query"));
     QCOMPARE(config.dns().bootstrapDns, QStringLiteral("223.5.5.5"));
+    // The same triple again, but reached through the member initialisers instead of through the
+    // loader. They are separate code paths -- for a missing file the loader leaves these fields
+    // alone and the defaults below are what the session actually runs on -- and the gate log line
+    // that reports the resolvers in effect reports whichever one it was built from.
+    //
+    // Only spellings the app actually uses are asserted here.
+    const Config defaultInit;
+    QCOMPARE(defaultInit.dns().directDns, QStringLiteral("https://dns.alidns.com/dns-query"));
+    QCOMPARE(defaultInit.dns().remoteDns, QStringLiteral("https://cloudflare-dns.com/dns-query"));
+    QCOMPARE(defaultInit.dns().bootstrapDns, QStringLiteral("223.5.5.5"));
+    QVERIFY(defaultInit.dns().defaultAllowInsecure);
+    // `Config()` is the spelling the app's fallback paths use, so it has to carry the same default.
+    QVERIFY(Config().dns().defaultAllowInsecure);
     // The braced spellings are asserted too, and not for their own sake. Without the declared
     // constructor on DnsConfigState this toolchain (MSVC 19.29, /std:c++20, /Od /RTC1) puts the
     // three resolver stores one slot early for an empty brace list -- remoteDns took directDns's
@@ -313,6 +326,9 @@ void JsonConfigRepositoryTests::loadMissingFileBuildsDefaultSongBirdConfig()
     QCOMPARE(bracedDns.remoteDns, QStringLiteral("https://cloudflare-dns.com/dns-query"));
     QCOMPARE(bracedDns.bootstrapDns, QStringLiteral("223.5.5.5"));
     QVERIFY(config.dns().enableCacheFile4Sbox);
+    // On by default: a node whose certificate does not verify must not read as a dead node to a
+    // user who has no reason to look here. The key is only written when it is turned off.
+    QVERIFY(config.dns().defaultAllowInsecure);
     QVERIFY(!config.ui().mainProxyEnabled);
     QCOMPARE(config.tun().tunModeItem.icmpRouting, QStringLiteral("rule"));
     QCOMPARE(config.tun().tunModeItem.udpRouting, QStringLiteral("direct"));
@@ -609,7 +625,7 @@ void JsonConfigRepositoryTests::saveWritesCanonicalSongBirdStructure()
     config.dns().domainStrategyForFreedom = QStringLiteral("UseIPv4");
     config.dns().domainStrategyForProxy = QStringLiteral("UseIPv6");
     config.dns().dnsHosts = QStringLiteral("example.com 127.0.0.1");
-    config.dns().defaultAllowInsecure = true;
+    config.dns().defaultAllowInsecure = false;
     config.ignoreGeoUpdateCore = true;
     config.systemProxyAdvancedProtocol = QStringLiteral("socks");
     config.checkPreReleaseUpdate = true;
@@ -678,6 +694,12 @@ void JsonConfigRepositoryTests::saveWritesCanonicalSongBirdStructure()
     QVERIFY(!savedRoot.contains(QStringLiteral("domainStrategy4Proxy")));
     QVERIFY(!savedRoot.contains(QStringLiteral("hosts")));
     QVERIFY(!savedRoot.contains(QStringLiteral("defAllowInsecure")));
+    // The inverse of the default, and the only value that is written at all: turning the setting
+    // off is a deliberate act, so it has to survive a round trip, while leaving it on writes
+    // nothing and is what an absent key now means. `contains` matters here -- reading a missing
+    // key as false would make this pass on a repository that had simply dropped the field.
+    QVERIFY(savedRoot.contains(QStringLiteral("defaultAllowInsecure")));
+    QCOMPARE(savedRoot.value(QStringLiteral("defaultAllowInsecure")).toBool(), false);
     QVERIFY(!savedRoot.contains(QStringLiteral("domainStrategy4Singbox")));
     QVERIFY(!savedRoot.contains(QStringLiteral("languageCode")));
 

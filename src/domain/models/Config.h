@@ -44,7 +44,10 @@ struct DnsConfigState {
     QString domainStrategyForFreedom;
     QString domainStrategyForProxy;
     QString dnsHosts;
-    bool defaultAllowInsecure = false;
+    // On by default: an expired or hostname-mismatched certificate is common on the free and
+    // self-hosted nodes this app is pointed at, and a node that cannot complete a handshake is
+    // indistinguishable from a dead node to a user who does not know to look here.
+    bool defaultAllowInsecure = true;
 };
 
 struct UiConfigState {
