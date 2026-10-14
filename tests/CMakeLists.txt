@@ -810,6 +810,48 @@ songbird_add_qt_test(songbird_system_proxy_mode_tests system-proxy-mode
         Qt${QT_VERSION_MAJOR}::Widgets
 )
 
+# LogSeverity decides the marker the information panel prints in front of every
+# line, and logSeverityFromCoreOutput reads the level a core already printed in
+# its own line. Both are pure string logic over three cores' log formats, so they
+# get a target of their own instead of dragging in the panel.
+#
+# Only the header is listed: LogSeverity.cpp is in SONGBIRD_SHARED_SOURCES, and
+# every test target already links songbird_shared_objs, so compiling it here as
+# well would define logSeverityMarker twice.
+set(SONGBIRD_LOG_SEVERITY_TEST_SOURCES
+    LogSeverityTests.cpp
+    ../src/common/LogSeverity.h
+)
+
+songbird_add_qt_test(songbird_log_severity_tests log-severity
+    SOURCES
+        ${SONGBIRD_LOG_SEVERITY_TEST_SOURCES}
+    LIBRARIES
+        Qt${QT_VERSION_MAJOR}::Test
+        Qt${QT_VERSION_MAJOR}::Widgets
+)
+
+# The file the panel's lines are also appended to. The two rules that matter --
+# rotation within a day, and which files retention is allowed to delete -- are pure
+# functions over file names, and the writer takes both its directory and its clock
+# as parameters, so every case runs against a temporary directory with a clock the
+# test moves by hand rather than against the real application data directory.
+#
+# Only the header is listed, for the same reason as above: LogFileWriter.cpp is in
+# SONGBIRD_SHARED_SOURCES, and every test target already links songbird_shared_objs.
+set(SONGBIRD_LOG_FILE_WRITER_TEST_SOURCES
+    LogFileWriterTests.cpp
+    ../src/common/LogFileWriter.h
+)
+
+songbird_add_qt_test(songbird_log_file_writer_tests log-file-writer
+    SOURCES
+        ${SONGBIRD_LOG_FILE_WRITER_TEST_SOURCES}
+    LIBRARIES
+        Qt${QT_VERSION_MAJOR}::Test
+        Qt${QT_VERSION_MAJOR}::Widgets
+)
+
 # StartupSequencer is the abort-on-failure primitive AppBootstrap::run() drives its startup
 # tail through, and decideStartupWindowAction is the tray-less fallback branch that used to be
 # an untested nested if inside run(). Both are pure and dependency-free, so they get a target of
@@ -817,6 +859,7 @@ songbird_add_qt_test(songbird_system_proxy_mode_tests system-proxy-mode
 set(SONGBIRD_STARTUP_SEQUENCER_TEST_SOURCES
     StartupSequencerTests.cpp
     ../src/common/StartupSequencer.h
+    ../src/app/StartupBanner.h
     ../src/app/StartupCorePromptPolicy.h
     ../src/app/StartupWindowPolicy.h
 )

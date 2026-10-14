@@ -12,6 +12,7 @@
 #include "appcore/IUserFeedback.h"
 #include "app/SpeedTestCoordinator.h"
 #include "common/DialogUtils.h"
+#include "common/LogFileWriter.h"
 #include "domain/models/Config.h"
 #include "services/ServerService.h"
 #include "services/SpeedTestController.h"
@@ -22,6 +23,14 @@
 void AppBootstrap::wireUiObjects()
 {
     objects_->mainWindow = std::make_unique<MainWindow>();
+    // Every line the panel shows is also appended to a file, so a report can be
+    // sent after the fact. The directory is resolved here rather than inside the
+    // window: paths belong to the composition root, and a window constructed
+    // without a writer stays a pure in-memory sink, which is what keeps the window
+    // tests off the real application data directory.
+    objects_->logFileWriter = std::make_unique<LogFileWriter>(
+        LogFileWriter::defaultDirectory(), QStringLiteral("songbird"));
+    objects_->mainWindow->setLogFileWriter(objects_->logFileWriter.get());
     objects_->mainWindow->setShareUrlResolver([this](const QString& indexId) {
         const VmessItem* server = findServerById(indexId);
         return server == nullptr ? QString() : ShareUrlBuilder::build(*server).trimmed();

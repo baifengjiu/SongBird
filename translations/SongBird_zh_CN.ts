@@ -718,6 +718,10 @@ Restart SongBird and use the downloaded package to update to the new version.</s
         <translation>启动检查：%1 个自定义服务器配置文件缺失。</translation>
     </message>
     <message>
+        <source>Could not write the log file; the lines below exist only in this panel.</source>
+        <translation>无法写入日志文件；以下内容仅存在于本面板中。</translation>
+    </message>
+    <message>
         <source>Failed to save the TUN mode setting.</source>
         <translation>保存 TUN 模式设置失败。</translation>
     </message>

@@ -11,6 +11,7 @@
 #include <QStringList>
 
 #include "appcore/BackgroundTaskCoordinator.h"
+#include "common/LogSeverity.h"
 #include "common/OperationResult.h"
 #include "common/SystemProxyMode.h"
 #include "domain/models/RuntimeState.h"
@@ -99,6 +100,7 @@ private:
     // are the bodies that used to be inlined in run(); keeping them named is
     // what lets run() stay a pure assembly step.
     void initializeTray();
+    void logStartupBanner();
     void adoptManagedSystemProxyOnStartup();
     void presentMainWindowOnStartup();
     void scheduleAppUpdateChecks();
@@ -109,7 +111,13 @@ private:
     bool reloadConfig();
     void applyStartupSystemProxyPreference();
     void appendStartupResourceCheckResults();
+    // Severity is derived from the result: success is Info, a cancellation is a
+    // Warning, and anything else is an Error. The two-argument overload exists
+    // for the handful of lines whose wording and outcome disagree -- "the node
+    // was set, but verify it yourself" is a failure of activation yet not an
+    // error the user can act on.
     void appendResult(const OperationResult& result);
+    void appendResult(const OperationResult& result, LogSeverity severity);
     void showOperationMessage(
         const QString& title,
         const OperationResult& result,

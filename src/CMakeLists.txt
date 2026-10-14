@@ -42,6 +42,10 @@ set(SONGBIRD_SHARED_SOURCES
     common/GitHubReleaseParsing.h
     common/GitHubReleaseParsing.cpp
     common/JsonFile.h
+    common/LogFileWriter.h
+    common/LogFileWriter.cpp
+    common/LogSeverity.h
+    common/LogSeverity.cpp
     common/PortValidator.h
     common/RoutingValuePattern.h
     common/RoutingValuePattern.cpp
@@ -284,6 +288,7 @@ set(SONGBIRD_SOURCES
     app/AppBootstrap.h
     app/AppBootstrap.cpp
     app/AppBootstrapObjects.h
+    app/StartupBanner.h
     app/StartupWindowPolicy.h
     app/AppBootstrapObjects.cpp
     app/AppBootstrapWorkflowWiring.cpp

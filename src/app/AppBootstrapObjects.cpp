@@ -33,6 +33,7 @@
 #include "app/SystemProxyCoordinator.h"
 #include "app/TunModeCoordinator.h"
 #include "appcore/TunRuntimeService.h"
+#include "common/LogFileWriter.h"
 #include "persistence/JsonConfigRepository.h"
 #include "runtime/ClientConfigWriter.h"
 #include "runtime/QtCoreProcessHost.h"

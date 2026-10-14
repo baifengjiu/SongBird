@@ -141,6 +141,13 @@ $allowlist = @{
     #       skippedSummary(), so that one line mixes languages. Left as-is because the trace
     #       is read by whoever is debugging a broken subscription feed, and splitting the
     #       tag off the payload would break the grep-ability that makes it useful.
+    #
+    #   "SongBird %1 | Qt %2 | %3" and "Config: %1"   src/app/StartupBanner.h
+    #       -- the two identification lines the information panel opens with. Every slot is a
+    #       version, a platform name or a path, so there is no prose for a translator to move;
+    #       localising the template is what would let the fields it exists to carry be
+    #       reordered or rewritten. They sit in a helper that returns a QStringList rather than
+    #       being handed to OperationResult directly, which is why Check A does not see them.
     # ---------------------------------------------------------------------------
 
     # The speed-test runtime writes pipe-delimited key=value diagnostic lines

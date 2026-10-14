@@ -3,6 +3,7 @@
 
 #include <QCoreApplication>
 #include <QMessageBox>
+#include <QStringList>
 
 #include "app/AppUpdateCheckCoordinator.h"
 #include "appcore/BackgroundTaskCoordinator.h"
@@ -15,6 +16,7 @@
 #include "app/SpeedTestCoordinator.h"
 #include "app/SubscriptionWorkflowCoordinator.h"
 #include "common/DialogUtils.h"
+#include "common/LogSeverity.h"
 #include "common/OperationResult.h"
 #include "domain/models/Config.h"
 #include "domain/models/CoreTypeItem.h"
@@ -72,21 +74,49 @@ void AppBootstrap::wireProxySessionSignals()
                      objects_->mainWindow.get(), [this]() {
                          syncStatusIndicators();
                      });
+    // A core writes into a pipe this process reads, so without a tag its lines
+    // are indistinguishable from ours once they are in the panel -- the panel is
+    // where the two meet. SongBirdAuto has tagged its core lines "core | " since
+    // it grew a log view (SongBirdAutoCoordinator), so this follows that
+    // convention instead of inventing a second one. The level is read from the
+    // line itself rather than assigned, because the core is the one that judged
+    // it; the line is forwarded verbatim, so a line copied out of the panel still
+    // matches the same line in the core's own log file.
     QObject::connect(objects_->proxySession.get(), &ProxySession::coreOutput,
-                     objects_->mainWindow.get(), [this](const QString& line) { appendResult(OperationResult::ok(line)); });
+                     objects_->mainWindow.get(), [this](const QString& line) {
+                         // The core belongs to whichever activation started it, and a report
+                         // usually interleaves two attempts. Carrying the activation id makes a
+                         // core resolver error attributable to the attempt it belongs to instead of
+                         // leaving the reader to line it up by timestamp.
+                         const QString activationId = objects_->proxySession->activationId();
+                         const QString tagged = activationId.isEmpty()
+                             ? line
+                             : QStringList{activationId, line}.join(QStringLiteral(" | "));
+                         appendResult(OperationResult::ok(QStringLiteral("core | %1").arg(tagged)),
+                                      logSeverityFromCoreOutput(line));
+                     });
     QObject::connect(objects_->proxySession.get(), &ProxySession::auxiliaryCoreOutput,
                      objects_->mainWindow.get(), [this](const QString& line) {
-                         appendResult(OperationResult::ok(QStringLiteral("tun-compat | %1").arg(line)));
+                         const QString activationId = objects_->proxySession->activationId();
+                         const QString tagged = activationId.isEmpty()
+                             ? line
+                             : QStringList{activationId, line}.join(QStringLiteral(" | "));
+                         appendResult(OperationResult::ok(QStringLiteral("tun-compat | %1").arg(tagged)),
+                                      logSeverityFromCoreOutput(line));
                      });
     QObject::connect(objects_->proxySession.get(), &ProxySession::failed,
                      objects_->mainWindow.get(), [this](const QString& reason) {
                          appendResult(OperationResult::fail(reason));
                          saveSystemProxyMode(SystemProxyMode::ForcedClear);
                          if (setCurrentActivationPending_) {
+                             // A failure by outcome, a warning by reading: the node
+                             // was written and may well work, so this is not the
+                             // same class of event as the reason printed above it.
                              appendResult(OperationResult::fail(
-                                 QCoreApplication::translate(
-                                     "AppBootstrap",
-                                     "Node set successfully. It may be inaccessible. Please verify manually.")));
+                                              QCoreApplication::translate(
+                                                  "AppBootstrap",
+                                                  "Node set successfully. It may be inaccessible. Please verify manually.")),
+                                          LogSeverity::Warning);
                              setCurrentActivationPending_ = false;
                          }
                          syncStatusIndicators();

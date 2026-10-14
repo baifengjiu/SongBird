@@ -6,6 +6,7 @@
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFontMetrics>
 #include <QHeaderView>
 #include <QLabel>
@@ -25,11 +26,14 @@
 #include <QStandardItemModel>
 #include <QStyleOptionViewItem>
 #include <QTableView>
+#include <QTemporaryDir>
 #include <QTextOption>
 #include <QToolBar>
 #include <QToolButton>
 #include <QWidgetList>
 
+#include "common/LogFileWriter.h"
+#include "common/LogSeverity.h"
 #include "domain/models/Config.h"
 #include "subscription/ShareUrlBuilder.h"
 #include "ui/mainwindow/LogItemDelegate.h"
@@ -52,6 +56,8 @@ class MainWindowTests : public QObject {
 
 private slots:
     void appendLogKeepsBottomWhenCursorAtLastLine();
+    void appendLogPrefixesTheSeverityMarker();
+    void appendLogAlsoWritesTheLineToTheLogFile();
     void appendLogPreservesViewportWhenCursorNotAtLastLine();
     void appendLogPreservesViewportWhenFilterActive();
     void logStickToBottomButtonMatchesFilterHeight();
@@ -419,6 +425,77 @@ void MainWindowTests::appendLogKeepsBottomWhenCursorAtLastLine()
     QCoreApplication::processEvents();
 
     QTRY_COMPARE(logView->verticalScrollBar()->value(), logView->verticalScrollBar()->maximum());
+}
+
+void MainWindowTests::appendLogPrefixesTheSeverityMarker()
+{
+    MainWindow window;
+    window.resize(1000, 640);
+    window.show();
+    QCoreApplication::processEvents();
+
+    // The severity is a parameter with an Info default, so the many call sites
+    // that only pass a message keep compiling and keep rendering as Info.
+    window.appendLog(QStringLiteral("routine step"));
+    window.appendLog(QStringLiteral("something to look at"), LogSeverity::Warning);
+    window.appendLog(QStringLiteral("activation failed"), LogSeverity::Error);
+    QCoreApplication::processEvents();
+
+    auto* logView = window.findChild<QListView*>(QStringLiteral("logView"));
+    QVERIFY(logView != nullptr);
+    QAbstractItemModel* model = logView->model();
+    QVERIFY(model != nullptr);
+    QCOMPARE(model->rowCount(), 3);
+
+    const QString infoLine = model->index(0, 0).data(Qt::DisplayRole).toString();
+    const QString warningLine = model->index(1, 0).data(Qt::DisplayRole).toString();
+    const QString errorLine = model->index(2, 0).data(Qt::DisplayRole).toString();
+
+    // "[HH:mm:ss] [X] message" -- the marker sits between the timestamp and the
+    // message so it lines up as a column.
+    const QString infoExpected = QStringLiteral("[I] routine step");
+    const QString warningExpected = QStringLiteral("[W] something to look at");
+    const QString errorExpected = QStringLiteral("[E] activation failed");
+    QVERIFY2(infoLine.endsWith(infoExpected), qPrintable(infoLine));
+    QVERIFY2(warningLine.endsWith(warningExpected), qPrintable(warningLine));
+    QVERIFY2(errorLine.endsWith(errorExpected), qPrintable(errorLine));
+}
+
+// The file sink is additive, not a replacement: the panel still shows the line.
+//
+// Asserting both here rather than only the file is the point -- an early return
+// added in front of the panel write would leave this file correct and the panel
+// silently empty, and the panel is what the user is actually looking at.
+void MainWindowTests::appendLogAlsoWritesTheLineToTheLogFile()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    // Declared before the window so it outlives it: the window borrows it.
+    LogFileWriter writer(directory.path(), QStringLiteral("songbird"));
+    MainWindow window;
+    window.setLogFileWriter(&writer);
+    window.resize(1000, 640);
+    window.show();
+    QCoreApplication::processEvents();
+
+    window.appendLog(QStringLiteral("routine step"));
+    window.appendLog(QStringLiteral("activation failed"), LogSeverity::Error);
+    QCoreApplication::processEvents();
+
+    QFile file(writer.currentFilePath());
+    QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(writer.currentFilePath()));
+    const QString contents = QString::fromUtf8(file.readAll());
+    QVERIFY2(contents.contains(QStringLiteral("[I] routine step")), qPrintable(contents));
+    QVERIFY2(contents.contains(QStringLiteral("[E] activation failed")), qPrintable(contents));
+    // Two records, two lines: the file must not gain a line for anything the panel
+    // was not asked to show.
+    QCOMPARE(contents.count(QChar('\n')), 2);
+
+    auto* logView = window.findChild<QListView*>(QStringLiteral("logView"));
+    QVERIFY(logView != nullptr);
+    QVERIFY(logView->model() != nullptr);
+    QCOMPARE(logView->model()->rowCount(), 2);
 }
 
 void MainWindowTests::appendLogPreservesViewportWhenCursorNotAtLastLine()

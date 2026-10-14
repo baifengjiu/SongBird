@@ -21,6 +21,7 @@ class IProxyActivationCoordinator;
 class IRuntimeEnvironment;
 class IUserFeedback;
 class JsonConfigRepository;
+class LogFileWriter;
 class MainWindow;
 class OutboundLivenessProbeService;
 class OutboundLocationProbeService;
@@ -57,6 +58,13 @@ struct AppBootstrapObjects {
     //     owned twice — by a unique_ptr here and by mainWindow's child list —
     //     so if mainWindow were destroyed first, ~QObject would delete them and
     //     the unique_ptrs would then free the same pointers again.
+    //   * `logFileWriter` sits above `mainWindow` because the window borrows it:
+    //     every line the panel shows is appended to the file first, so the writer
+    //     has to outlive the window. Note that check-appbootstrap-member-order
+    //     cannot see this one — the window is handed the writer through a setter
+    //     rather than a constructor argument, and the script only reads
+    //     make_unique() arguments. Moving either of these two lines past the other
+    //     is a use-after-free during shutdown that no test observes.
     // Adding new members at the end is safe; inserting one above `mainWindow`
     // requires re-checking this order.
 
@@ -89,6 +97,9 @@ struct AppBootstrapObjects {
     std::unique_ptr<ProxySession> proxySession;
     std::unique_ptr<IUserFeedback> userFeedback;
     std::unique_ptr<ApplicationRestartCoordinator> applicationRestartCoordinator;
+    // Declared before mainWindow, which borrows it. See the ordering note at the
+    // top of this struct.
+    std::unique_ptr<LogFileWriter> logFileWriter;
     // Declared here, before the coordinators that are parented to it, so it is
     // destroyed after them. See the ordering note at the top of this struct.
     std::unique_ptr<MainWindow> mainWindow;

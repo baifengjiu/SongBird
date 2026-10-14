@@ -4,6 +4,8 @@
 #include <QString>
 #include <QWidget>
 
+#include "common/LogSeverity.h"
+
 class QAction;
 class QLineEdit;
 class QListView;
@@ -21,7 +23,7 @@ class LogPanelWidget final : public QWidget {
 public:
     explicit LogPanelWidget(QWidget* parent = nullptr);
 
-    void appendLog(const QString& message);
+    void appendLog(const QString& message, LogSeverity severity = LogSeverity::Info);
     void setCompactMode(bool compact);
 
 protected:

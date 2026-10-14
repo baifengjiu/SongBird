@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 
 #include <QCloseEvent>
 #include <QHash>
@@ -9,6 +10,7 @@
 #include <QMap>
 #include <QStringList>
 
+#include "common/LogSeverity.h"
 #include "domain/models/Config.h"
 #include "domain/models/RuntimeState.h"
 #include "ui/mainwindow/MainWindowConfigState.h"
@@ -28,6 +30,7 @@ class QVBoxLayout;
 class QShowEvent;
 class QSplitter;
 class QTabBar;
+class LogFileWriter;
 class LogPanelWidget;
 class BackgroundTaskActionsController;
 class ProxyToolbarController;
@@ -73,7 +76,12 @@ public:
     void setConfig(const Config& config);
     void setShareUrlResolver(std::function<QString(const QString&)> resolver);
     void setExistingCoreTypes(const QList<CoreType>& coreTypes);
-    void appendLog(const QString& message);
+    // Borrowed, never owned, and outlives this window: the composition root
+    // declares it first so it is destroyed last. Leaving it unset is supported and
+    // is what the tests rely on -- the panel is then the only sink, and nothing
+    // touches the filesystem.
+    void setLogFileWriter(LogFileWriter* writer);
+    void appendLog(const QString& message, LogSeverity severity = LogSeverity::Info);
     void setHideToTrayEnabled(bool enabled);
     void setAllowClose(bool allowClose);
     bool requestExit();
@@ -257,6 +265,7 @@ private:
     QList<QAction*> desktopOnlyToolbarWidgetActions_;
     MainWindowConfigSnapshot configSnapshot_;
     std::function<QString(const QString&)> shareUrlResolver_;
+    LogFileWriter* logFileWriter_ = nullptr;
     QList<CoreType> existingCoreTypes_;
     QString currentIndexId_;
     QString currentServerName_;

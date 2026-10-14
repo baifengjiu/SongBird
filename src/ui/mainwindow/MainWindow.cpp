@@ -1,6 +1,7 @@
 #include "ui/mainwindow/MainWindow.h"
 #include "common/AppPlatform.h"
 #include "common/DialogUtils.h"
+#include "common/LogFileWriter.h"
 #include "domain/models/RuntimeState.h"
 
 #include <QAction>
@@ -308,10 +309,22 @@ void MainWindow::setServerTableDynamicSortEnabled(bool enabled, bool invalidateM
     }
 }
 
-void MainWindow::appendLog(const QString& message)
+void MainWindow::setLogFileWriter(LogFileWriter* writer)
 {
+    logFileWriter_ = writer;
+}
+
+void MainWindow::appendLog(const QString& message, LogSeverity severity)
+{
+    // The file first: it is the sink that survives the process, and a line that
+    // reached the panel but not the file is exactly the line a crash report is
+    // missing.
+    if (logFileWriter_ != nullptr) {
+        logFileWriter_->append(severity, message);
+    }
+
     if (serverWorkspace_ != nullptr && serverWorkspace_->logPanel() != nullptr) {
-        serverWorkspace_->logPanel()->appendLog(message);
+        serverWorkspace_->logPanel()->appendLog(message, severity);
     }
 }
 

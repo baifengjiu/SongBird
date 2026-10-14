@@ -7,6 +7,7 @@
 #include "app/ApplicationRestartCoordinator.h"
 #include "appcore/AppRuntimeResolver.h"
 #include "app/RuntimeStateSnapshotBuilder.h"
+#include "app/StartupBanner.h"
 #include "app/StartupCorePromptPolicy.h"
 #include "app/StartupWindowPolicy.h"
 #include "appcore/BackgroundTaskCoordinator.h"
@@ -31,6 +32,7 @@
 #include "common/AppPlatform.h"
 #include "common/DialogUtils.h"
 #include "common/GitHubUrls.h"
+#include "common/LogFileWriter.h"
 #include "common/StartupSequencer.h"
 #include "common/ThreadShutdown.h"
 
@@ -44,8 +46,8 @@
 #include <QMetaObject>
 #include <QMessageBox>
 #include <QPointer>
-#include <QRegularExpression>
 #include <QSessionManager>
+#include <QSysInfo>
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
@@ -102,17 +104,27 @@ namespace {
 constexpr auto AppReleaseDate = __DATE__;
 constexpr int AppUpdateCheckIntervalMs = 24 * 60 * 60 * 1000;
 
-bool isRoutineCoreLogLine(const QString& line)
+// Severity of a message this process generates, taken from the result that
+// carries it. Nothing is inferred from the wording: OperationResult already
+// knows whether the operation succeeded or was cancelled, and that was being
+// thrown away one call before the line reached the panel.
+LogSeverity severityFor(const OperationResult& result)
 {
-    static const QRegularExpression importantLevelPattern(QStringLiteral(
-        "(?:\\[(?:Warning|Error|Fatal|Panic)\\]|\\b(?:WARN|WARNING|ERROR|FATAL|PANIC)\\b)"));
-    if (importantLevelPattern.match(line).hasMatch()) {
-        return false;
+    if (result.success) {
+        return LogSeverity::Info;
     }
+    return result.cancelled ? LogSeverity::Warning : LogSeverity::Error;
+}
 
-    static const QRegularExpression routineLevelPattern(QStringLiteral(
-        "(?:\\[(?:Info|Debug)\\]|^\\s*(?:INFO|DEBUG)\\b|\\b(?:INFO|DEBUG)\\[)"));
-    return routineLevelPattern.match(line).hasMatch();
+// Operating system and architecture as the running process sees them. The OS
+// build is part of the answer to a whole class of reports (TUN adapter
+// behaviour, system-proxy semantics) and it is the one thing a user cannot be
+// relied upon to state correctly.
+QString platformSummary()
+{
+    const QString architecture = QSysInfo::currentCpuArchitecture();
+    const QString product = QSysInfo::prettyProductName();
+    return product.isEmpty() ? architecture : QStringLiteral("%1 %2").arg(product, architecture);
 }
 
 QString proxySessionPhaseName(ProxySession::Phase phase)
@@ -221,6 +233,7 @@ bool AppBootstrap::run()
     StartupSequencer sequencer;
     sequencer.addStep(QStringLiteral("cleanup-orphan-core-processes"), [this]() { cleanupOrphanCoreProcesses(); });
     sequencer.addStep(QStringLiteral("wire-main-window"), [this]() { wireMainWindow(); });
+    sequencer.addStep(QStringLiteral("log-startup-banner"), [this]() { logStartupBanner(); });
     sequencer.addStep(QStringLiteral("initialize-tray"), [this]() { initializeTray(); });
     sequencer.addStep(QStringLiteral("refresh-existing-core-types"), [this]() { refreshExistingCoreTypes(); });
     sequencer.addGate(QStringLiteral("reload-config"), [this]() { return reloadConfig(); });
@@ -236,6 +249,37 @@ bool AppBootstrap::run()
 void AppBootstrap::initializeTray()
 {
     objects_->mainWindow->setHideToTrayEnabled(objects_->trayController->initialize());
+}
+
+// First lines in the panel, before anything can fail.
+//
+// The text itself lives in StartupBanner.h so its content is a value a test can
+// assert; this method only supplies what only the running process knows.
+void AppBootstrap::logStartupBanner()
+{
+    const QString logFilePath =
+        objects_->logFileWriter == nullptr ? QString() : objects_->logFileWriter->currentFilePath();
+    const QStringList lines = startupBannerLines(
+        QCoreApplication::applicationVersion(),
+        QString::fromLatin1(qVersion()),
+        platformSummary(),
+        configPath_,
+        logFilePath);
+    for (const QString& line : lines) {
+        appendResult(OperationResult::ok(line));
+    }
+
+    // Said out loud rather than left silent. From inside the panel a log file that
+    // is not being written looks exactly like one that is, and the user who is
+    // about to be asked for it has no other way to find out -- which is the whole
+    // failure this feature exists to prevent.
+    if (objects_->logFileWriter == nullptr || !objects_->logFileWriter->isEnabled()) {
+        appendResult(
+            OperationResult::fail(QCoreApplication::translate(
+                "AppBootstrap",
+                "Could not write the log file; the lines below exist only in this panel.")),
+            LogSeverity::Warning);
+    }
 }
 
 void AppBootstrap::adoptManagedSystemProxyOnStartup()
@@ -561,6 +605,11 @@ void AppBootstrap::appendStartupResourceCheckResults()
 
 void AppBootstrap::appendResult(const OperationResult& result)
 {
+    appendResult(result, severityFor(result));
+}
+
+void AppBootstrap::appendResult(const OperationResult& result, LogSeverity severity)
+{
     if (result.message.trimmed().isEmpty()) {
         return;
     }
@@ -580,7 +629,7 @@ void AppBootstrap::appendResult(const OperationResult& result)
 
     if (objects_->mainWindow != nullptr) {
         for (const QString& line : lines) {
-            objects_->mainWindow->appendLog(line);
+            objects_->mainWindow->appendLog(line, severity);
         }
     }
 }

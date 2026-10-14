@@ -156,11 +156,12 @@ LogPanelWidget::LogPanelWidget(QWidget* parent)
     updateLogContextActions();
 }
 
-void LogPanelWidget::appendLog(const QString& message)
+void LogPanelWidget::appendLog(const QString& message, LogSeverity severity)
 {
-    const QString line = QStringLiteral("[%1] %2")
-                             .arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss")))
-                             .arg(message);
+    const QString line = QStringLiteral("[%1] %2 %3")
+                             .arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss")),
+                                  logSeverityMarker(severity),
+                                  message);
 
     if (logModel_ == nullptr) {
         return;
