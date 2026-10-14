@@ -26,6 +26,7 @@ private:
     QLineEdit* remoteDnsEdit_ = nullptr;
     QLineEdit* directDnsEdit_ = nullptr;
     QLineEdit* bootstrapDnsEdit_ = nullptr;
+    QLineEdit* proxyServerDnsEdit_ = nullptr;
     QComboBox* domainStrategyForFreedomCombo_ = nullptr;
     QComboBox* domainStrategyForProxyCombo_ = nullptr;
     QCheckBox* useSystemHostsCheck_ = nullptr;

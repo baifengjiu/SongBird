@@ -23,6 +23,11 @@ QString DnsConfigFragments::mapDomainStrategyToSingBox(const QString& strategy)
     return DnsSupport::mapDomainStrategy(strategy);
 }
 
+QString DnsConfigFragments::defaultDomainResolverTag(const QJsonArray& dnsServers)
+{
+    return DnsSupport::defaultDomainResolverTag(dnsServers);
+}
+
 bool DnsConfigFragments::isIpAddress(const QString& value)
 {
     return DnsHosts::isIpAddress(value);

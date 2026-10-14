@@ -52,6 +52,7 @@ void DnsSettingsPageWidget::setConfig(const Config& config)
     remoteDnsEdit_->setText(config.dns().remoteDns);
     directDnsEdit_->setText(config.dns().directDns);
     bootstrapDnsEdit_->setText(config.dns().bootstrapDns);
+    proxyServerDnsEdit_->setText(config.dns().proxyServerDns);
     domainStrategyForFreedomCombo_->setCurrentText(config.dns().domainStrategyForFreedom);
     domainStrategyForProxyCombo_->setCurrentText(config.dns().domainStrategyForProxy);
     useSystemHostsCheck_->setChecked(config.dns().useSystemHosts);
@@ -71,6 +72,7 @@ void DnsSettingsPageWidget::applyToConfig(Config& config) const
     config.dns().remoteDns = remoteDnsEdit_->text().trimmed();
     config.dns().directDns = directDnsEdit_->text().trimmed();
     config.dns().bootstrapDns = bootstrapDnsEdit_->text().trimmed();
+    config.dns().proxyServerDns = proxyServerDnsEdit_->text().trimmed();
     config.dns().domainStrategyForFreedom = domainStrategyForFreedomCombo_->currentText().trimmed();
     config.dns().domainStrategyForProxy = domainStrategyForProxyCombo_->currentText().trimmed();
     config.dns().useSystemHosts = useSystemHostsCheck_->isChecked();
@@ -99,6 +101,11 @@ void DnsSettingsPageWidget::setupUi()
     bootstrapDnsEdit_ = new QLineEdit(this);
     bootstrapDnsEdit_->setObjectName(QStringLiteral("settingsBootstrapDnsEdit"));
     bootstrapDnsEdit_->setPlaceholderText(QStringLiteral("223.5.5.5"));
+
+    proxyServerDnsEdit_ = new QLineEdit(this);
+    proxyServerDnsEdit_->setObjectName(QStringLiteral("settingsProxyServerDnsEdit"));
+    proxyServerDnsEdit_->setPlaceholderText(QStringLiteral("https://1.1.1.1/dns-query"));
+    proxyServerDnsEdit_->setToolTip(tr("Resolves the proxy server's own hostname. Empty uses the direct DNS."));
 
     domainStrategyForFreedomCombo_ = new QComboBox(this);
     domainStrategyForFreedomCombo_->setObjectName(QStringLiteral("settingsDomainStrategyForFreedomCombo"));
@@ -139,6 +146,7 @@ void DnsSettingsPageWidget::setupUi()
         remoteDnsEdit_,
         directDnsEdit_,
         bootstrapDnsEdit_,
+        proxyServerDnsEdit_,
         domainStrategyForFreedomCombo_,
         domainStrategyForProxyCombo_,
         useSystemHostsCheck_,
@@ -154,6 +162,7 @@ void DnsSettingsPageWidget::setupUi()
     dnsLayout->addRow(tr("Remote DNS"), remoteDnsEdit_);
     dnsLayout->addRow(tr("Direct DNS"), directDnsEdit_);
     dnsLayout->addRow(tr("Bootstrap DNS"), bootstrapDnsEdit_);
+    dnsLayout->addRow(tr("Proxy Server DNS"), proxyServerDnsEdit_);
     dnsLayout->addRow(tr("Domain Strategy (Freedom)"), domainStrategyForFreedomCombo_);
     dnsLayout->addRow(tr("Domain Strategy (Proxy)"), domainStrategyForProxyCombo_);
     dnsLayout->setWidget(dnsLayout->rowCount(), QFormLayout::SpanningRole, useSystemHostsCheck_);

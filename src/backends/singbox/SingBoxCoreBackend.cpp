@@ -189,12 +189,20 @@ QJsonObject SingBoxCoreBackend::buildClientRoot(const Config& config, const Vmes
     root.insert(QStringLiteral("outbounds"), buildOutbounds(config, server));
     const std::optional<RoutingItem> selectedRouting = RoutingConfigFragments::resolveSelectedRouting(config);
     const RoutingItem* selectedRoutingPtr = selectedRouting.has_value() ? &*selectedRouting : nullptr;
-    root.insert(QStringLiteral("route"), SingBoxRoutingConfigFragments::buildRoute(config, selectedRoutingPtr));
 
+    // The DNS servers come first because the route has to name one of them: sing-box refuses to
+    // start when the config declares more than one server and no default resolver, so the tag is
+    // read back from the servers that were actually emitted.
     const QJsonObject dns = DnsConfigFragments::buildSingBoxDns(config, selectedRoutingPtr);
     if (!dns.isEmpty()) {
         root.insert(QStringLiteral("dns"), dns);
     }
+
+    root.insert(QStringLiteral("route"),
+        SingBoxRoutingConfigFragments::buildRoute(
+            config,
+            selectedRoutingPtr,
+            dns.value(QStringLiteral("servers")).toArray()));
 
     const QJsonObject experimental = buildExperimental(config);
     if (!experimental.isEmpty()) {

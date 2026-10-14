@@ -21,8 +21,6 @@
 
 namespace {
 
-const QString kSingBoxDirectDnsTag = QStringLiteral("direct_dns");
-
 QString resolveLocalSingBoxRuleSetPath(const QString& tag)
 {
     const QString fileName = QStringLiteral("%1.srs").arg(tag);
@@ -36,15 +34,28 @@ QString resolveLocalSingBoxRuleSetPath(const QString& tag)
 
 } // namespace
 
-QJsonObject SingBoxRoutingConfigFragments::buildRoute(const Config& config, const RoutingItem* selectedRouting)
+QJsonObject SingBoxRoutingConfigFragments::buildRoute(
+    const Config& config,
+    const RoutingItem* selectedRouting,
+    const QJsonArray& dnsServers)
 {
     QJsonObject route;
     route.insert(QStringLiteral("final"), QStringLiteral("proxy"));
+
+    // A custom `dns` object carries its own resolver rules, so the app must not inject a
+    // `resolve` rule built from the hosts maps on top of it.
     const bool customDnsObject = DnsConfigFragments::isCustomDnsObjectText(config.dns().remoteDns);
-    const bool hasDirectDnsServer = !DnsConfigFragments::parseSingBoxDnsAddress(config.dns().directDns).isEmpty();
-    if (!customDnsObject && hasDirectDnsServer) {
+
+    // Naming a default resolver is not optional once the config declares more than one DNS
+    // server: sing-box refuses to start without it (FATAL, and only the deprecated
+    // ENABLE_DEPRECATED_MISSING_DOMAIN_RESOLVER escape hatch silences it). So the tag comes from
+    // the servers the config really carries rather than being assumed to be `direct_dns`, which
+    // used to leave the field out whenever the direct DNS was cleared or replaced by a custom
+    // `dns` object -- exactly the two states a user can reach from the settings page.
+    const QString defaultResolverTag = DnsConfigFragments::defaultDomainResolverTag(dnsServers);
+    if (!defaultResolverTag.isEmpty()) {
         QJsonObject defaultDomainResolver;
-        defaultDomainResolver.insert(QStringLiteral("server"), kSingBoxDirectDnsTag);
+        defaultDomainResolver.insert(QStringLiteral("server"), defaultResolverTag);
         const QString directDnsStrategy = DnsConfigFragments::mapDomainStrategyToSingBox(config.dns().domainStrategyForFreedom);
         if (!directDnsStrategy.isEmpty()) {
             defaultDomainResolver.insert(QStringLiteral("strategy"), directDnsStrategy);

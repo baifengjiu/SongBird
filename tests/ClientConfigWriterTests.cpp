@@ -91,7 +91,9 @@ private slots:
     void generateClientConfigsBuildsSimpleDnsPackForSingBoxCore();
     void generateClientConfigsUsesDirectDnsAsFinalServerForCatchAllDirectRouting();
     void generateClientConfigsAddsSingBoxFakeDnsServerAndCacheStorageWhenEnabled();
-    void generateClientConfigsSkipsSimpleDnsRouteResolverForCustomSingBoxDnsObject();
+    void generateClientConfigsNamesCustomDnsObjectServerAsDefaultResolver();
+    void generateClientConfigsKeepsDefaultResolverWhenDirectDnsIsCleared();
+    void generateClientConfigsAddsProxyServerDnsServerAndResolverToProxyOutbound();
     void generateClientConfigsKeepsDirectDnsAheadOfNonGlobalFakeDnsFallback();
     void generateClientConfigsUsesLogicalFakeIpFilterWhenGlobalFakeIpEnabled();
     void generateClientConfigsAddsCommonHostsWithoutRouteResolveRuleForSingBoxCore();
@@ -2220,7 +2222,7 @@ void ClientConfigWriterTests::generateClientConfigsAddsSingBoxFakeDnsServerAndCa
     QCOMPARE(cacheFile.value(QStringLiteral("store_fakeip")).toBool(), true);
 }
 
-void ClientConfigWriterTests::generateClientConfigsSkipsSimpleDnsRouteResolverForCustomSingBoxDnsObject()
+void ClientConfigWriterTests::generateClientConfigsNamesCustomDnsObjectServerAsDefaultResolver()
 {
     Config config = baseConfig();
     config.tun().tunModeItem.enableTun = false;
@@ -2235,13 +2237,22 @@ void ClientConfigWriterTests::generateClientConfigsSkipsSimpleDnsRouteResolverFo
     const ClientConfigWriter::GeneratedConfigSet generated = writer.generateClientConfigs(config, server);
 
     const QJsonObject dns = generated.primary.root.value(QStringLiteral("dns")).toObject();
-    QCOMPARE(findObjectByTag(dns.value(QStringLiteral("servers")).toArray(), QStringLiteral("custom_remote"))
+    const QJsonArray dnsServers = dns.value(QStringLiteral("servers")).toArray();
+    QCOMPARE(findObjectByTag(dnsServers, QStringLiteral("custom_remote"))
                  .value(QStringLiteral("server"))
                  .toString(),
              QStringLiteral("8.8.8.8"));
 
+    // A custom object replaces the whole `dns` section, so the only tags that exist are the ones it
+    // declares -- and the default resolver still has to name one of them. Naming none is a hard
+    // start failure for sing-box whenever the section carries more than one server.
     const QJsonObject route = generated.primary.root.value(QStringLiteral("route")).toObject();
-    QVERIFY(route.value(QStringLiteral("default_domain_resolver")).isUndefined());
+    const QString resolverTag = route.value(QStringLiteral("default_domain_resolver"))
+                                    .toObject()
+                                    .value(QStringLiteral("server"))
+                                    .toString();
+    QCOMPARE(resolverTag, QStringLiteral("custom_remote"));
+    QVERIFY(!findObjectByTag(dnsServers, resolverTag).isEmpty());
 
     bool foundHostsResolveRule = false;
     for (const QJsonValue& value : route.value(QStringLiteral("rules")).toArray()) {
@@ -2253,6 +2264,72 @@ void ClientConfigWriterTests::generateClientConfigsSkipsSimpleDnsRouteResolverFo
         }
     }
     QVERIFY(!foundHostsResolveRule);
+}
+
+void ClientConfigWriterTests::generateClientConfigsKeepsDefaultResolverWhenDirectDnsIsCleared()
+{
+    Config config = baseConfig();
+    config.tun().tunModeItem.enableTun = false;
+    config.dns().directDns.clear();
+
+    VmessItem server = baseServer();
+    server.coreType = CoreType::SingBox;
+
+    ClientConfigWriter writer;
+    const ClientConfigWriter::GeneratedConfigSet generated = writer.generateClientConfigs(config, server);
+
+    const QJsonArray dnsServers = generated.primary.root.value(QStringLiteral("dns"))
+                                      .toObject()
+                                      .value(QStringLiteral("servers"))
+                                      .toArray();
+    // Clearing the direct DNS is a state the settings page can reach, and it used to drop the
+    // default resolver along with it -- which is exactly what makes sing-box refuse to start.
+    QVERIFY(dnsServers.size() > 1);
+    QVERIFY(findObjectByTag(dnsServers, QStringLiteral("direct_dns")).isEmpty());
+
+    const QString resolverTag = generated.primary.root.value(QStringLiteral("route"))
+                                    .toObject()
+                                    .value(QStringLiteral("default_domain_resolver"))
+                                    .toObject()
+                                    .value(QStringLiteral("server"))
+                                    .toString();
+    QVERIFY(!resolverTag.isEmpty());
+    QVERIFY(!findObjectByTag(dnsServers, resolverTag).isEmpty());
+}
+
+void ClientConfigWriterTests::generateClientConfigsAddsProxyServerDnsServerAndResolverToProxyOutbound()
+{
+    Config config = baseConfig();
+    config.tun().tunModeItem.enableTun = false;
+    config.dns().proxyServerDns = QStringLiteral("https://1.1.1.1/dns-query");
+
+    VmessItem server = baseServer();
+    server.coreType = CoreType::SingBox;
+
+    ClientConfigWriter writer;
+    const ClientConfigWriter::GeneratedConfigSet generated = writer.generateClientConfigs(config, server);
+
+    const QJsonArray dnsServers = generated.primary.root.value(QStringLiteral("dns"))
+                                      .toObject()
+                                      .value(QStringLiteral("servers"))
+                                      .toArray();
+    const QJsonObject proxyServerDns = findObjectByTag(dnsServers, QStringLiteral("proxy_server_dns"));
+    QCOMPARE(proxyServerDns.value(QStringLiteral("type")).toString(), QStringLiteral("https"));
+    QCOMPARE(proxyServerDns.value(QStringLiteral("server")).toString(), QStringLiteral("1.1.1.1"));
+    QCOMPARE(proxyServerDns.value(QStringLiteral("path")).toString(), QStringLiteral("/dns-query"));
+
+    // The node's own hostname has to be resolved before the node can be dialled, so it can never go
+    // through the proxy. The proxy outbound names this server explicitly rather than leaning on the
+    // route default, and the tag it names has to be one the `dns` section really carries.
+    const QJsonObject proxyOutbound = findObjectByTag(
+        generated.primary.root.value(QStringLiteral("outbounds")).toArray(),
+        QStringLiteral("proxy"));
+    const QString resolverTag = proxyOutbound.value(QStringLiteral("domain_resolver"))
+                                    .toObject()
+                                    .value(QStringLiteral("server"))
+                                    .toString();
+    QCOMPARE(resolverTag, QStringLiteral("proxy_server_dns"));
+    QVERIFY(!findObjectByTag(dnsServers, resolverTag).isEmpty());
 }
 
 void ClientConfigWriterTests::generateClientConfigsKeepsDirectDnsAheadOfNonGlobalFakeDnsFallback()

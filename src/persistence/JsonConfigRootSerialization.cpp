@@ -69,6 +69,7 @@ void read(const QJsonObject& root, RootConfigState& config)
     if (root.contains(QStringLiteral("bootstrapDns"))) {
         config.dns().bootstrapDns = readString(root, QStringLiteral("bootstrapDns"));
     }
+    config.dns().proxyServerDns = readString(root, QStringLiteral("proxyServerDns"));
     if (root.contains(QStringLiteral("fakeIp"))) {
         config.dns().fakeIp = readBool(root, QStringLiteral("fakeIp"), false);
     }
@@ -154,6 +155,7 @@ void write(QJsonObject& root, const RootConfigState& config)
         QStringLiteral("bootstrapDns"),
         config.dns().bootstrapDns,
         QStringLiteral("223.5.5.5"));
+    writeIfNotEmpty(root, QStringLiteral("proxyServerDns"), config.dns().proxyServerDns);
     writeIfNotDefault(root, QStringLiteral("fakeIp"), config.dns().fakeIp, false);
     writeIfNotDefault(root, QStringLiteral("globalFakeIp"), config.dns().globalFakeIp, true);
     writeIfNotDefault(root, QStringLiteral("serveStale"), config.dns().serveStale, false);

@@ -58,6 +58,11 @@ QString fakeDnsTag()
     return QStringLiteral("fake_dns");
 }
 
+QString proxyServerDnsTag()
+{
+    return QStringLiteral("proxy_server_dns");
+}
+
 QJsonObject parseDnsAddress(const QString& value)
 {
     const QStringList addresses = DnsAddressParser::splitDnsAddresses(value);
@@ -354,6 +359,39 @@ void applyHostsResolver(QJsonObject& dnsServer, const QJsonObject& predefinedHos
     if (!serverName.isEmpty() && predefinedHosts.contains(serverName)) {
         dnsServer.insert(QStringLiteral("domain_resolver"), hostsDnsTag());
     }
+}
+
+bool hasProxyServerDns(const Config& config)
+{
+    return !parseDnsAddress(config.dns().proxyServerDns).isEmpty();
+}
+
+QString defaultDomainResolverTag(const QJsonArray& dnsServers)
+{
+    QStringList tags;
+    tags.reserve(dnsServers.size());
+    for (const QJsonValue& value : dnsServers) {
+        const QString tag = value.toObject().value(QStringLiteral("tag")).toString().trimmed();
+        if (!tag.isEmpty()) {
+            tags.append(tag);
+        }
+    }
+
+    // `direct_dns` first: it is what this config used to name unconditionally, so configs that
+    // carry it keep the answer they had. The rest only decide the fallback when the user cleared
+    // the direct DNS or handed us a custom `dns` object whose tags we cannot predict.
+    const QStringList preferred{
+        directDnsTag(),
+        proxyServerDnsTag(),
+        localDnsTag(),
+        remoteDnsTag()};
+    for (const QString& candidate : preferred) {
+        if (tags.contains(candidate)) {
+            return candidate;
+        }
+    }
+
+    return tags.isEmpty() ? QString() : tags.constFirst();
 }
 
 QString finalDnsServerTag(

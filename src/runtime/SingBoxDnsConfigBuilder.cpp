@@ -22,7 +22,19 @@ QJsonObject build(const Config& config, const RoutingItem* selectedRouting)
         if (parseError.error == QJsonParseError::NoError
             && document.isObject()
             && document.object().contains(QStringLiteral("servers"))) {
-            return document.object();
+            // A custom object replaces the whole `dns` section, so the only tags that exist are the
+            // ones it declares. The node resolver is appended on top of them, because it is the one
+            // server this app has to be able to name: the node's own hostname cannot be resolved
+            // through the proxy that is about to dial it.
+            QJsonObject dnsObject = document.object();
+            QJsonObject proxyServerDns = DnsSupport::parseDnsAddress(config.dns().proxyServerDns);
+            if (!proxyServerDns.isEmpty()) {
+                proxyServerDns.insert(QStringLiteral("tag"), DnsSupport::proxyServerDnsTag());
+                QJsonArray customServers = dnsObject.value(QStringLiteral("servers")).toArray();
+                customServers.append(proxyServerDns);
+                dnsObject.insert(QStringLiteral("servers"), customServers);
+            }
+            return dnsObject;
         }
     }
 
@@ -55,6 +67,20 @@ QJsonObject build(const Config& config, const RoutingItem* selectedRouting)
         servers.append(directDnsServer);
     }
 
+    // The node's own hostname has to be resolved before the node can be dialled, so it can never
+    // go through the proxy. A server of its own keeps that lookup out of `Direct DNS` and out of
+    // `route.default_domain_resolver`, which is what used to cover it by accident.
+    QJsonObject proxyServerDnsServer = DnsSupport::parseDnsAddress(config.dns().proxyServerDns);
+    if (!proxyServerDnsServer.isEmpty()) {
+        proxyServerDnsServer.insert(QStringLiteral("tag"), DnsSupport::proxyServerDnsTag());
+        // A hostname-addressed resolver needs a bootstrap of its own, but only name one that is
+        // really emitted: a dangling tag resolves to nothing at runtime.
+        if (!localDns.isEmpty()) {
+            proxyServerDnsServer.insert(QStringLiteral("domain_resolver"), DnsSupport::localDnsTag());
+        }
+        servers.append(proxyServerDnsServer);
+    }
+
     const QMap<QString, QStringList> hostsMap = DnsHosts::parseConfigured(config.dns().dnsHosts);
     const QJsonObject predefinedHosts = DnsSupport::predefinedHosts(config, hostsMap);
     const bool hasPredefinedHosts = !predefinedHosts.isEmpty();
@@ -64,6 +90,7 @@ QJsonObject build(const Config& config, const RoutingItem* selectedRouting)
     DnsSupport::applyHostsResolver(localDns, predefinedHosts);
     DnsSupport::applyHostsResolver(remoteDnsServer, predefinedHosts);
     DnsSupport::applyHostsResolver(directDnsServer, predefinedHosts);
+    DnsSupport::applyHostsResolver(proxyServerDnsServer, predefinedHosts);
     for (qsizetype index = 0; index < servers.size(); ++index) {
         const QString tag = servers.at(index).toObject().value(QStringLiteral("tag")).toString();
         if (tag == DnsSupport::localDnsTag()) {
@@ -72,6 +99,8 @@ QJsonObject build(const Config& config, const RoutingItem* selectedRouting)
             servers[index] = remoteDnsServer;
         } else if (tag == DnsSupport::directDnsTag()) {
             servers[index] = directDnsServer;
+        } else if (tag == DnsSupport::proxyServerDnsTag()) {
+            servers[index] = proxyServerDnsServer;
         }
     }
     if (hasPredefinedHosts) {

@@ -33,6 +33,10 @@ struct DnsConfigState {
     QString directDns = QStringLiteral("https://dns.alidns.com/dns-query");
     QString remoteDns = QStringLiteral("https://cloudflare-dns.com/dns-query");
     QString bootstrapDns = QStringLiteral("223.5.5.5");
+    // Resolves the proxy node's own hostname, which has to happen before the node can be dialled
+    // and therefore can never go through it. Empty keeps the historical behaviour of letting the
+    // direct DNS answer that lookup through route.default_domain_resolver.
+    QString proxyServerDns;
     bool fakeIp = false;
     bool globalFakeIp = true;
     bool serveStale = false;

@@ -6,6 +6,7 @@
 #include "backends/singbox/SingBoxTlsConfigFragments.h"
 #include "backends/singbox/SingBoxTransportConfigFragments.h"
 #include "runtime/ProtocolConfigMapper.h"
+#include "runtime/SingBoxDnsConfigSupport.h"
 
 namespace OutboundSupport = SingBoxOutboundConfigSupport;
 
@@ -217,6 +218,15 @@ QJsonObject SingBoxOutboundConfigFragments::buildPrimaryOutbound(const Config& c
         if (!transport.isEmpty()) {
             outbound.insert(QStringLiteral("transport"), transport);
         }
+    }
+
+    // The node's own hostname has to be resolved before the node can be dialled, so it can never
+    // go through the proxy. Naming the dedicated server here keeps that lookup on the user's own
+    // setting instead of on whichever server `route.default_domain_resolver` happens to name.
+    if (SingBoxDnsConfigSupport::hasProxyServerDns(config)) {
+        QJsonObject domainResolver;
+        domainResolver.insert(QStringLiteral("server"), SingBoxDnsConfigSupport::proxyServerDnsTag());
+        outbound.insert(QStringLiteral("domain_resolver"), domainResolver);
     }
 
     return outbound;

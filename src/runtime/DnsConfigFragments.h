@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QMap>
 #include <QStringList>
@@ -16,6 +17,7 @@ public:
     static bool isCustomDnsObjectText(const QString& value);
     static QJsonObject parseSingBoxDnsAddress(const QString& value);
     static QString mapDomainStrategyToSingBox(const QString& strategy);
+    static QString defaultDomainResolverTag(const QJsonArray& dnsServers);
     static bool usesDirectDnsAsFinalServer(const RoutingItem* routing);
     static bool appendSingBoxDomainField(QJsonObject& rule, const QString& value, bool plainAsDomain);
     static bool isIpAddress(const QString& value);

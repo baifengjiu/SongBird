@@ -614,6 +614,7 @@ void JsonConfigRepositoryTests::saveWritesCanonicalSongBirdStructure()
     config.dns().directDns = QStringLiteral("1.1.1.1");
     config.dns().remoteDns = QStringLiteral("8.8.4.4");
     config.dns().bootstrapDns = QStringLiteral("9.9.9.9");
+    config.dns().proxyServerDns = QStringLiteral("https://node-dns.example/dns-query");
     config.dns().fakeIp = true;
     config.dns().globalFakeIp = false;
     config.dns().serveStale = true;
@@ -687,6 +688,8 @@ void JsonConfigRepositoryTests::saveWritesCanonicalSongBirdStructure()
     QVERIFY(!savedRoot.contains(QStringLiteral("directDNS")));
     QVERIFY(!savedRoot.contains(QStringLiteral("remoteDNS")));
     QVERIFY(!savedRoot.contains(QStringLiteral("bootstrapDNS")));
+    QCOMPARE(savedRoot.value(QStringLiteral("proxyServerDns")).toString(),
+             QStringLiteral("https://node-dns.example/dns-query"));
     QVERIFY(!savedRoot.contains(QStringLiteral("fakeIP")));
     QVERIFY(!savedRoot.contains(QStringLiteral("enableParallelQuery")));
     QVERIFY(!savedRoot.contains(QStringLiteral("directExpectedIPs")));

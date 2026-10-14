@@ -1594,6 +1594,14 @@ The running core will be stopped before installation if needed.</source>
         <translation>引导 DNS</translation>
     </message>
     <message>
+        <source>Proxy Server DNS</source>
+        <translation>代理服务器 DNS</translation>
+    </message>
+    <message>
+        <source>Resolves the proxy server&apos;s own hostname. Empty uses the direct DNS.</source>
+        <translation>解析代理服务器自身的主机名。留空则使用直连 DNS。</translation>
+    </message>
+    <message>
         <source>Domain Strategy (Freedom)</source>
         <translation>域名策略（自由出站）</translation>
     </message>

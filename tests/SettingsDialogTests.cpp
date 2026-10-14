@@ -1162,6 +1162,7 @@ void SettingsDialogTests::dnsPageRoundTripsFields()
     config.dns().remoteDns = QStringLiteral("https://one.example/dns-query");
     config.dns().directDns = QStringLiteral("https://two.example/dns-query");
     config.dns().bootstrapDns = QStringLiteral("1.1.1.1");
+    config.dns().proxyServerDns = QStringLiteral("https://node-dns.example/dns-query");
     config.dns().domainStrategyForFreedom = QStringLiteral("UseIPv6");
     config.dns().domainStrategyForProxy = QStringLiteral("UseIPv4");
     config.dns().useSystemHosts = true;
@@ -1178,6 +1179,7 @@ void SettingsDialogTests::dnsPageRoundTripsFields()
     dialog.setConfig(config);
 
     auto* remoteDnsEdit = dialog.findChild<QLineEdit*>(QStringLiteral("settingsRemoteDnsEdit"));
+    auto* proxyServerDnsEdit = dialog.findChild<QLineEdit*>(QStringLiteral("settingsProxyServerDnsEdit"));
     auto* freedomCombo = dialog.findChild<QComboBox*>(QStringLiteral("settingsDomainStrategyForFreedomCombo"));
     auto* proxyCombo = dialog.findChild<QComboBox*>(QStringLiteral("settingsDomainStrategyForProxyCombo"));
     auto* directExpectedIpsEdit = dialog.findChild<QLineEdit*>(QStringLiteral("settingsDirectExpectedIpsEdit"));
@@ -1188,6 +1190,7 @@ void SettingsDialogTests::dnsPageRoundTripsFields()
     auto* fakeIpCheck = dialog.findChild<QCheckBox*>(QStringLiteral("dnsFakeIpCheck"));
     auto* globalFakeIpCheck = dialog.findChild<QCheckBox*>(QStringLiteral("dnsGlobalFakeIpCheck"));
     QVERIFY(remoteDnsEdit != nullptr);
+    QVERIFY(proxyServerDnsEdit != nullptr);
     QVERIFY(freedomCombo != nullptr);
     QVERIFY(proxyCombo != nullptr);
 
@@ -1205,6 +1208,7 @@ void SettingsDialogTests::dnsPageRoundTripsFields()
     QVERIFY(globalFakeIpCheck != nullptr);
 
     QCOMPARE(remoteDnsEdit->text(), QStringLiteral("https://one.example/dns-query"));
+    QCOMPARE(proxyServerDnsEdit->text(), QStringLiteral("https://node-dns.example/dns-query"));
     QCOMPARE(freedomCombo->currentText(), QStringLiteral("UseIPv6"));
     QCOMPARE(proxyCombo->currentText(), QStringLiteral("UseIPv4"));
     QVERIFY(useSystemHostsCheck->isChecked());
@@ -1216,6 +1220,7 @@ void SettingsDialogTests::dnsPageRoundTripsFields()
     QCOMPARE(dnsHostsEdit->toPlainText(), QStringLiteral("example.com 1.2.3.4"));
 
     remoteDnsEdit->setText(QStringLiteral("https://changed.example/dns-query"));
+    proxyServerDnsEdit->setText(QStringLiteral("https://changed-node.example/dns-query"));
     freedomCombo->setCurrentText(QStringLiteral("ForceIPv4"));
     proxyCombo->setCurrentText(QStringLiteral("ForceIPv6"));
     useSystemHostsCheck->setChecked(false);
@@ -1226,6 +1231,7 @@ void SettingsDialogTests::dnsPageRoundTripsFields()
 
     const Config updated = dialog.config();
     QCOMPARE(updated.dns().remoteDns, QStringLiteral("https://changed.example/dns-query"));
+    QCOMPARE(updated.dns().proxyServerDns, QStringLiteral("https://changed-node.example/dns-query"));
     QCOMPARE(updated.dns().domainStrategyForFreedom, QStringLiteral("ForceIPv4"));
     QCOMPARE(updated.dns().domainStrategyForProxy, QStringLiteral("ForceIPv6"));
     QVERIFY(!updated.dns().useSystemHosts);
