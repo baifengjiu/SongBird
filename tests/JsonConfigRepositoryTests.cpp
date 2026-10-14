@@ -300,6 +300,18 @@ void JsonConfigRepositoryTests::loadMissingFileBuildsDefaultSongBirdConfig()
     QCOMPARE(config.dns().directDns, QStringLiteral("https://dns.alidns.com/dns-query"));
     QCOMPARE(config.dns().remoteDns, QStringLiteral("https://cloudflare-dns.com/dns-query"));
     QCOMPARE(config.dns().bootstrapDns, QStringLiteral("223.5.5.5"));
+    // The braced spellings are asserted too, and not for their own sake. Without the declared
+    // constructor on DnsConfigState this toolchain (MSVC 19.29, /std:c++20, /Od /RTC1) puts the
+    // three resolver stores one slot early for an empty brace list -- remoteDns took directDns's
+    // value and bootstrapDns took remoteDns's -- so these five lines are what stops
+    // `DnsConfigState() = default;` in Config.h from being deleted as redundant.
+    const Config bracedConfig{};
+    QCOMPARE(bracedConfig.dns().directDns, QStringLiteral("https://dns.alidns.com/dns-query"));
+    QCOMPARE(bracedConfig.dns().remoteDns, QStringLiteral("https://cloudflare-dns.com/dns-query"));
+    QCOMPARE(bracedConfig.dns().bootstrapDns, QStringLiteral("223.5.5.5"));
+    const DnsConfigState bracedDns{};
+    QCOMPARE(bracedDns.remoteDns, QStringLiteral("https://cloudflare-dns.com/dns-query"));
+    QCOMPARE(bracedDns.bootstrapDns, QStringLiteral("223.5.5.5"));
     QVERIFY(config.dns().enableCacheFile4Sbox);
     QVERIFY(!config.ui().mainProxyEnabled);
     QCOMPARE(config.tun().tunModeItem.icmpRouting, QStringLiteral("rule"));

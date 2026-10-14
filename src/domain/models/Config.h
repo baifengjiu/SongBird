@@ -18,6 +18,14 @@ struct DefaultsConfigState {
 };
 
 struct DnsConfigState {
+    // Declared on purpose, and not redundant. Without it this type is an aggregate, and MSVC 19.29
+    // compiling the Debug test trees (/Od /Ob0 /RTC1) mis-initialises the three resolver defaults
+    // when the object is built from an empty brace list: `DnsConfigState{}` reports remoteDns with
+    // directDns's value and bootstrapDns with remoteDns's value, while `DnsConfigState()` and a
+    // plain declaration are both correct. Declaring the constructor moves the brace spelling off
+    // the aggregate-initialisation path, so all three spellings agree.
+    // Guarded by loadMissingFileBuildsDefaultSongBirdConfig in tests/JsonConfigRepositoryTests.cpp.
+    DnsConfigState() = default;
     bool enableFragment = false;
     bool enableCacheFile4Sbox = true;
     QString defaultFingerprint;
